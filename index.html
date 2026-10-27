@@ -1,0 +1,2480 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bản Đồ Số Quản Lý Địa Bàn & ANTT - Công An Phường Kon Tum</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 480px;
+            z-index: 10;
+        }
+        .cand-gradient {
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #172554 100%);
+        }
+        .gold-badge {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+        .pulse-marker {
+            animation: pulse-ring 2s infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 2px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-blue-600 selection:text-white flex flex-col min-h-screen">
+
+    <!-- TOP HEADER: CHUẨN CÔNG AN NHÂN DÂN -->
+    <header class="cand-gradient text-white shadow-lg sticky top-0 z-50 border-b-2 border-amber-500">
+        <div class="max-w-[1600px] mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand Logo & Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full gold-badge flex items-center justify-center shadow-md border-2 border-amber-200 shrink-0">
+                    <i class="fa-solid fa-shield-halved text-white text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] uppercase tracking-widest font-bold text-amber-400">Công An Tỉnh Quảng Ngãi</span>
+                        <span class="hidden sm:inline-block text-[10px] bg-red-600/90 text-white px-2 py-0.5 rounded-full font-semibold">Bản đồ số ANTT v4.0</span>
+                    </div>
+                    <h1 class="text-base sm:text-lg md:text-xl font-extrabold tracking-tight text-white leading-tight">
+                        CÔNG AN PHƯỜNG KON TUM - QUẢN LÝ ĐỊA BÀN & ANTT
+                    </h1>
+                </div>
+            </div>
+
+            <!-- Role Switcher & Quick Controls (Cho phép chủ động kiểm tra 3 phân quyền) -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
+                <div class="bg-slate-900/80 border border-slate-700 rounded-xl p-1 flex items-center text-xs">
+                    <span class="px-2.5 py-1 text-slate-400 font-medium hidden md:inline"><i class="fa-solid fa-user-shield mr-1 text-amber-400"></i>Phân quyền:</span>
+                    <button onclick="switchRole('GUEST')" id="roleBtn-GUEST" class="px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 bg-amber-500 text-slate-950 shadow">
+                        <i class="fa-solid fa-users"></i> Khách (Dân)
+                    </button>
+                    <button onclick="switchRole('CSKV')" id="roleBtn-CSKV" class="px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-user-police-tie"></i> CSKV
+                    </button>
+                    <button onclick="switchRole('ADMIN')" id="roleBtn-ADMIN" class="px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-user-gear"></i> Admin (Chỉ huy)
+                    </button>
+                </div>
+
+                <!-- CSKV Selector (Hiện khi ở quyền CSKV) -->
+                <div id="cskvAccountSelectorWrap" class="hidden items-center bg-blue-950 border border-blue-700 rounded-xl px-2.5 py-1 text-xs">
+                    <i class="fa-solid fa-id-badge text-amber-400 mr-1.5"></i>
+                    <select id="activeCskvSelect" onchange="handleCskvAccountChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer pr-1 max-w-[170px] sm:max-w-[210px]">
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sub-navigation Bar (Thay đổi theo Role) -->
+        <div class="bg-slate-900/60 border-t border-white/10">
+            <div class="max-w-[1600px] mx-auto px-3 sm:px-6 flex items-center justify-between overflow-x-auto no-scrollbar py-1.5 text-xs sm:text-sm">
+                <div class="flex items-center space-x-1 sm:space-x-2">
+                    <button onclick="switchTab('MAP_LOOKUP')" id="tabBtn-MAP_LOOKUP" class="px-3.5 py-1.5 rounded-lg font-semibold bg-white/15 text-amber-300 flex items-center gap-2 whitespace-nowrap transition">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                        <span id="tabMapTitle">Tra Cứu CSKV & Bản Đồ Địa Bàn</span>
+                    </button>
+                    <button onclick="switchTab('INCIDENTS')" id="tabBtn-INCIDENTS" class="hidden px-3.5 py-1.5 rounded-lg font-medium text-slate-300 hover:bg-white/10 hover:text-white items-center gap-2 whitespace-nowrap transition">
+                        <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                        <span>Quản Lý Vụ Việc & Đối Tượng ANTT</span>
+                        <span id="incidentCountBadge" class="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">0</span>
+                    </button>
+                    <button onclick="switchTab('ADMIN_DATA')" id="tabBtn-ADMIN_DATA" class="hidden px-3.5 py-1.5 rounded-lg font-medium text-slate-300 hover:bg-white/10 hover:text-white items-center gap-2 whitespace-nowrap transition">
+                        <i class="fa-solid fa-database text-emerald-400"></i>
+                        <span>Quản Trị Dữ Liệu Số Nhà & Đường (316 Tuyến)</span>
+                    </button>
+                    <button onclick="switchTab('ADMIN_OFFICERS')" id="tabBtn-ADMIN_OFFICERS" class="hidden px-3.5 py-1.5 rounded-lg font-medium text-slate-300 hover:bg-white/10 hover:text-white items-center gap-2 whitespace-nowrap transition">
+                        <i class="fa-solid fa-address-book text-amber-400"></i>
+                        <span>Danh Bạ 32 Cán Bộ CSKV</span>
+                    </button>
+                </div>
+
+                <!-- Security Status Indicator -->
+                <div id="securityStatusBanner" class="hidden lg:flex items-center gap-2 text-xs text-slate-300">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="securityStatusText">Chế độ công khai (Đã ẩn toàn bộ dữ liệu mật ANTT)</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4">
+
+        <!-- ================================================================= -->
+        <!-- TAB 1: TRA CỨU ĐỊA BÀN & BẢN ĐỒ SỐ ANTT (HIỂN THỊ THEO ROLE)      -->
+        <!-- ================================================================= -->
+        <section id="view-MAP_LOOKUP" class="space-y-4">
+            
+            <!-- KPI Summary Row -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-white rounded-xl p-3.5 shadow-sm border border-slate-200 flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-road"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">Tuyến đường & Đoạn số nhà</p>
+                        <p class="text-xl font-extrabold text-slate-800" id="statTotalRoutes">316</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl p-3.5 shadow-sm border border-slate-200 flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">Cán bộ CSKV Phụ trách</p>
+                        <p class="text-xl font-extrabold text-slate-800" id="statTotalOfficers">32 CBCS</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl p-3.5 shadow-sm border border-slate-200 flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-map-pin"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">Đơn vị Tổ / Thôn</p>
+                        <p class="text-xl font-extrabold text-slate-800" id="statTotalGroups">45 Tổ/Thôn</p>
+                    </div>
+                </div>
+                <!-- Card thứ 4: Thay đổi giữa Guest (Hotline Công an Phường) và Admin/CSKV (Tổng vụ việc ANTT) -->
+                <div id="kpiCard4Guest" class="bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl p-3.5 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-red-100 font-medium">Trực ban Công an Phường Kon Tum</p>
+                        <p class="text-base sm:text-lg font-extrabold tracking-wide mt-0.5"><i class="fa-solid fa-phone-volume mr-1.5"></i>0260 3862 345</p>
+                    </div>
+                    <button onclick="locateUserGPS()" class="bg-white text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded-lg text-xs font-bold shadow transition shrink-0">
+                        <i class="fa-solid fa-location-crosshairs mr-1"></i>Định vị GPS
+                    </button>
+                </div>
+                <div id="kpiCard4Secure" class="hidden bg-gradient-to-r from-slate-900 to-red-950 text-white rounded-xl p-3.5 shadow-sm items-center justify-between border border-red-500/40">
+                    <div>
+                        <p class="text-xs text-red-300 font-medium flex items-center gap-1">
+                            <i class="fa-solid fa-lock text-[10px]"></i> Dữ liệu ANTT (Bảo mật)
+                        </p>
+                        <p class="text-xl font-extrabold text-white mt-0.5"><span id="statTotalIncidents">0</span> Vụ việc / Đối tượng</p>
+                    </div>
+                    <button onclick="openIncidentModal()" class="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg text-xs font-bold shadow transition shrink-0 flex items-center gap-1">
+                        <i class="fa-solid fa-plus"></i> Nhập vụ việc
+                    </button>
+                </div>
+            </div>
+
+            <!-- MAIN GRID: LEFT (TRA CỨU & KẾT QUẢ) - RIGHT (BẢN ĐỒ SỐ ĐỊA BÀN & ANTT) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                
+                <!-- CỘT TRÁI (5/12): CÔNG CỤ TRA CỨU SỐ NHÀ + TÊN ĐƯỜNG & THÔNG TIN CSKV -->
+                <div class="lg:col-span-5 flex flex-col gap-4">
+                    
+                    <!-- Box Tra cứu nhanh -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </span>
+                                Tra Cứu Nhanh Cảnh Sát Khu Vực
+                            </h2>
+                            <span class="text-[11px] bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
+                                Phân biệt Chẵn / Lẻ / Hẻm
+                            </span>
+                        </div>
+
+                        <p class="text-xs text-slate-500 mb-3">
+                            Nhập gộp <strong>Số nhà + Tên đường</strong> (VD: <code class="bg-slate-100 px-1.5 py-0.5 rounded text-blue-700 font-semibold">150 Trần Phú</code>, <code class="bg-slate-100 px-1.5 py-0.5 rounded text-blue-700 font-semibold">25 Lê Lai</code>, <code class="bg-slate-100 px-1.5 py-0.5 rounded text-blue-700 font-semibold">Bế Văn Đàn</code>) hoặc tách riêng bên dưới:
+                        </p>
+
+                        <!-- Ô nhập thông minh kết hợp -->
+                        <div class="space-y-3">
+                            <div class="relative">
+                                <i class="fa-solid fa-house-chimney-user absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                <input type="text" id="quickCombinedInput" oninput="handleQuickLookup()" placeholder="Nhập địa chỉ: VD 150 Trần Phú, 80 Đào Duy Từ, Hẻm 19 Cù Chính Lan..." 
+                                    class="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition">
+                                <button onclick="clearLookup()" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 px-2 py-1">
+                                    Xóa
+                                </button>
+                            </div>
+
+                            <!-- Bộ lọc tách Số nhà & Tên đường & Khu vực -->
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-4">
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Số nhà / Hẻm</label>
+                                    <input type="text" id="houseNumberInput" oninput="handleSplitLookup()" placeholder="VD: 150" 
+                                        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600">
+                                </div>
+                                <div class="col-span-8">
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Tên đường (Có gợi ý 135 đường)</label>
+                                    <input type="text" id="streetNameInput" list="streetListDatalist" oninput="handleSplitLookup()" placeholder="Chọn hoặc gõ tên đường..." 
+                                        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600">
+                                    <datalist id="streetListDatalist"></datalist>
+                                </div>
+                            </div>
+
+                            <!-- Các chip thử nghiệm nhanh & Nút lấy vị trí hiện tại -->
+                            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                                <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                    <span class="text-slate-400 font-medium">Thử nhanh:</span>
+                                    <button onclick="setSampleQuery('150 Trần Phú')" class="px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 rounded-md font-medium transition">150 Trần Phú</button>
+                                    <button onclick="setSampleQuery('145 Trần Phú')" class="px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 rounded-md font-medium transition">145 Trần Phú</button>
+                                    <button onclick="setSampleQuery('85 Ngô Quyền')" class="px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 rounded-md font-medium transition">85 Ngô Quyền</button>
+                                    <button onclick="setSampleQuery('210 Phan Đình Phùng')" class="px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 rounded-md font-medium transition">950 Phan Đình Phùng</button>
+                                </div>
+
+                                <button onclick="locateUserGPS()" class="w-full sm:w-auto mt-1 sm:mt-0 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition">
+                                    <i class="fa-solid fa-location-crosshairs"></i> Lấy vị trí hiện tại
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Box Kết quả CSKV Phụ trách -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
+                        <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                <i class="fa-solid fa-id-card-clip text-blue-600"></i>
+                                Kết Quả Cán Bộ CSKV Phụ Trách
+                            </h3>
+                            <span id="lookupMatchCount" class="text-xs font-semibold text-blue-700">Hiển thị toàn phường</span>
+                        </div>
+
+                        <!-- Danh sách kết quả tra cứu -->
+                        <div id="lookupResultsContainer" class="p-4 space-y-3 overflow-y-auto max-h-[460px]">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CỘT PHẢI (7/12): BẢN ĐỒ SỐ ĐỊA BÀN & TÌNH HÌNH ANTT -->
+                <div class="lg:col-span-7 flex flex-col gap-3">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3 sm:p-4 flex flex-col h-full">
+                        
+                        <!-- Thanh điều khiển Bản đồ & Bộ lọc Lĩnh vực ANTT -->
+                        <div class="flex flex-col gap-2.5 mb-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h2 class="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <i class="fa-solid fa-earth-asia text-blue-600"></i>
+                                        <span>Bản Đồ Số Địa Giới Hành Chính Phường Kon Tum</span>
+                                    </h2>
+                                    <p id="mapSubtitleRoleInfo" class="text-xs text-slate-500">
+                                        Hiển thị 5 khu vực sáp nhập (Trường Chinh, Thống Nhất, Thắng Lợi, Quyết Thắng, Quang Trung)
+                                    </p>
+                                </div>
+
+                                <!-- Bộ lọc Khu vực hành chính -->
+                                <div class="flex items-center gap-1.5">
+                                    <select id="mapZoneFilter" onchange="filterMapByZone(this.value)" class="text-xs bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600">
+                                        <option value="ALL">Tất cả 5 Khu vực (Toàn phường)</option>
+                                        <option value="TRƯỜNG CHINH CŨ">KV Trường Chinh cũ</option>
+                                        <option value="THỐNG NHẤT CŨ">KV Thống Nhất cũ</option>
+                                        <option value="THẮNG LỢI CŨ">KV Thắng Lợi cũ</option>
+                                        <option value="QUYẾT THẮNG CŨ">KV Quyết Thắng cũ</option>
+                                        <option value="QUANG TRUNG CŨ">KV Quang Trung cũ</option>
+                                    </select>
+                                    <button onclick="resetMapView()" title="Về trung tâm Phường Kon Tum" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">
+                                        <i class="fa-solid fa-compress"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- MENU LỌC LĨNH VỰC AN NINH TRẬT TỰ (CHỈ HIỆN VỚI ADMIN VÀ CSKV) -->
+                            <div id="securityMapFilterBar" class="hidden bg-slate-900 text-white p-2.5 rounded-xl border border-slate-700 flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400 mr-1 flex items-center gap-1">
+                                        <i class="fa-solid fa-filter"></i> Lĩnh vực ANTT:
+                                    </span>
+                                    <button onclick="setIncidentCategoryFilter('ALL')" id="catBtn-ALL" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition">
+                                        Tất cả
+                                    </button>
+                                    <button onclick="setIncidentCategoryFilter('TTXH')" id="catBtn-TTXH" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 flex items-center gap-1 transition">
+                                        <span class="w-2 h-2 rounded-full bg-amber-400"></span> Trật tự xã hội
+                                    </button>
+                                    <button onclick="setIncidentCategoryFilter('MATUY')" id="catBtn-MATUY" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-red-300 flex items-center gap-1 transition">
+                                        <span class="w-2 h-2 rounded-full bg-red-500"></span> Tội phạm Ma túy
+                                    </button>
+                                    <button onclick="setIncidentCategoryFilter('HINHSU')" id="catBtn-HINHSU" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-purple-300 flex items-center gap-1 transition">
+                                        <span class="w-2 h-2 rounded-full bg-purple-400"></span> Đối tượng Quản lý / Hình sự
+                                    </button>
+                                    <button onclick="setIncidentCategoryFilter('PCCC')" id="catBtn-PCCC" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 flex items-center gap-1 transition">
+                                        <span class="w-2 h-2 rounded-full bg-cyan-400"></span> PCCC & ATGT
+                                    </button>
+                                </div>
+                                <button onclick="openIncidentModal()" class="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1.5 shrink-0">
+                                    <i class="fa-solid fa-plus-circle"></i> Thêm Vụ Việc / Đối Tượng
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Khung chứa Bản đồ số Leaflet -->
+                        <div class="relative flex-1 rounded-xl overflow-hidden border border-slate-300 min-h-[480px]">
+                            <div id="map"></div>
+
+                            <!-- Chú giải nổi góc dưới trái bản đồ -->
+                            <div class="absolute bottom-3 left-3 z-[400] bg-white/95 backdrop-blur-sm p-2.5 rounded-xl shadow-lg border border-slate-200 text-[11px] max-w-[260px]">
+                                <div class="font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                                    <span><i class="fa-solid fa-layer-group text-blue-600 mr-1"></i>Chú giải Khu vực</span>
+                                    <span id="legendSecurityBadge" class="hidden text-[10px] bg-red-100 text-red-700 px-1.5 py-0.2 rounded font-bold">Lớp ANTT: BẬT</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-600">
+                                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue-600 inline-block"></span>Trường Chinh</div>
+                                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-600 inline-block"></span>Thống Nhất</div>
+                                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span>Thắng Lợi</div>
+                                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-purple-600 inline-block"></span>Quyết Thắng</div>
+                                    <div class="flex items-center gap-1.5 col-span-2"><span class="w-2.5 h-2.5 rounded-sm bg-rose-600 inline-block"></span>Quang Trung</div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 2: QUẢN LÝ VỤ VIỆC & ĐỐI TƯỢNG ANTT (CHỈ ADMIN & CSKV)        -->
+        <!-- ================================================================= -->
+        <section id="view-INCIDENTS" class="hidden space-y-4">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200">
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
+                            <i class="fa-solid fa-user-secret mr-1"></i>Phân hệ Nghiệp vụ Bảo mật
+                        </span>
+                        <h2 class="text-lg sm:text-xl font-extrabold text-slate-800 mt-1">
+                            Danh Sách Vụ Việc, Đối Tượng & Tình Hình ANTT Theo Địa Bàn
+                        </h2>
+                        <p id="incidentRoleNotice" class="text-xs text-slate-500 mt-0.5">
+                            Dữ liệu được phân quyền nghiêm ngặt theo địa bàn phụ trách của từng Cảnh sát khu vực.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="incidentTableFilterCat" onchange="renderIncidentsTable()" class="text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold">
+                            <option value="ALL">Tất cả lĩnh vực</option>
+                            <option value="MATUY">Tội phạm Ma túy</option>
+                            <option value="TTXH">Trật tự xã hội</option>
+                            <option value="HINHSU">Đối tượng Quản lý / Hình sự</option>
+                            <option value="PCCC">An toàn PCCC & Giao thông</option>
+                        </select>
+                        <button onclick="openIncidentModal()" class="bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow flex items-center gap-2 transition">
+                            <i class="fa-solid fa-plus"></i> Thêm Vụ Việc / Đối Tượng Mới
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bảng danh sách vụ việc -->
+                <div class="overflow-x-auto mt-4">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <th class="py-3 px-3">Mã / Ngày</th>
+                                <th class="py-3 px-3">Lĩnh vực</th>
+                                <th class="py-3 px-3">Địa chỉ nhà & Tổ/Thôn</th>
+                                <th class="py-3 px-3">Tên Đối tượng</th>
+                                <th class="py-3 px-3">Nội dung vụ việc liên quan</th>
+                                <th class="py-3 px-3">CSKV Phụ trách</th>
+                                <th class="py-3 px-3 text-right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="incidentsTableBody" class="divide-y divide-slate-200">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 3: QUẢN TRỊ DỮ LIỆU ĐỊA BÀN 316 TUYẾN ĐƯỜNG (DÀNH CHO ADMIN)  -->
+        <!-- ================================================================= -->
+        <section id="view-ADMIN_DATA" class="hidden space-y-4">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+                <!-- Header Quản trị -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200">
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                            <i class="fa-solid fa-database mr-1"></i>Cơ sở dữ liệu gốc: DS CSKV.xlsx
+                        </span>
+                        <h2 class="text-lg sm:text-xl font-extrabold text-slate-800 mt-1">
+                            Quản Trị Dữ Liệu Tuyến Đường, Số Nhà & Phân Công CSKV
+                        </h2>
+                        <p class="text-xs text-slate-500">
+                            Thêm mới, chỉnh sửa, xóa các đoạn số nhà hoặc thay đổi CSKV phụ trách. Mọi thay đổi được lưu tự động và áp dụng ngay cho ô Tra cứu.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="openAddressModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-plus"></i> Thêm Tuyến Đường / Số Nhà
+                        </button>
+                        <button onclick="exportDatabaseCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold px-3.5 py-2 rounded-xl shadow flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-excel"></i> Xuất CSV/Excel
+                        </button>
+                        <button onclick="resetDefaultDatabase()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>Khôi phục gốc (316 dòng)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bộ lọc tìm kiếm Admin -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 my-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Tìm theo tên đường / số nhà</label>
+                        <input type="text" id="adminSearchInput" oninput="renderAdminAddressTable()" placeholder="Gõ tên đường, số nhà, tổ..." class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Lọc theo Khu vực cũ</label>
+                        <select id="adminZoneFilter" onchange="renderAdminAddressTable()" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm">
+                            <option value="ALL">Tất cả 5 Khu vực</option>
+                            <option value="TRƯỜNG CHINH CŨ">Trường Chinh cũ</option>
+                            <option value="THỐNG NHẤT CŨ">Thống Nhất cũ</option>
+                            <option value="THẮNG LỢI CŨ">Thắng Lợi cũ</option>
+                            <option value="QUYẾT THẮNG CŨ">Quyết Thắng cũ</option>
+                            <option value="QUANG TRUNG CŨ">Quang Trung cũ</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Lọc theo Cán bộ CSKV</label>
+                        <select id="adminOfficerFilter" onchange="renderAdminAddressTable()" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm">
+                            <option value="ALL">Tất cả Cán bộ CSKV</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <div class="w-full bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-between">
+                            <span class="text-xs text-blue-800 font-medium">Đang hiển thị:</span>
+                            <span id="adminFilteredCount" class="text-sm font-extrabold text-blue-700">316 dòng</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bảng dữ liệu 316 dòng -->
+                <div class="overflow-x-auto max-h-[540px] border border-slate-200 rounded-xl">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead class="sticky top-0 bg-slate-800 text-white z-10">
+                            <tr>
+                                <th class="py-3 px-3 w-14">STT</th>
+                                <th class="py-3 px-3">Tổ / Thôn & Khu vực</th>
+                                <th class="py-3 px-3">Cán bộ CSKV Phụ trách</th>
+                                <th class="py-3 px-3">Tên đường</th>
+                                <th class="py-3 px-3">Khoảng Số nhà / Hẻm</th>
+                                <th class="py-3 px-3 text-right w-28">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminAddressTableBody" class="divide-y divide-slate-200 bg-white">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 4: QUẢN TRỊ DANH SÁCH 32 CÁN BỘ CSKV (DÀNH CHO ADMIN)          -->
+        <!-- ================================================================= -->
+        <section id="view-ADMIN_OFFICERS" class="hidden space-y-4">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-extrabold text-slate-800">
+                            Danh Bạ & Phân Công 32 Cán Bộ Cảnh Sát Khu Vực
+                        </h2>
+                        <p class="text-xs text-slate-500">
+                            Cập nhật số điện thoại liên hệ, cấp bậc và xem thống kê số tuyến đường của từng đồng chí CSKV.
+                        </p>
+                    </div>
+                    <button onclick="openOfficerModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-plus"></i> Thêm Cán Bộ CSKV Mới
+                    </button>
+                </div>
+
+                <div id="officersGridContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 1: THÊM / SỬA VỤ VIỆC & ĐỐI TƯỢNG ANTT                       -->
+    <!-- ================================================================= -->
+    <div id="incidentModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+            <div class="cand-gradient text-white px-5 py-3.5 flex items-center justify-between">
+                <h3 id="incidentModalTitle" class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-shield-virus text-amber-400"></i>
+                    Cập Nhật Vụ Việc & Đối Tượng ANTT
+                </h3>
+                <button onclick="closeIncidentModal()" class="text-slate-300 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form id="incidentForm" onsubmit="saveIncident(event)" class="p-5 space-y-3.5 text-xs sm:text-sm">
+                <input type="hidden" id="incId">
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Số nhà & Tên đường xảy ra *</label>
+                        <input type="text" id="incAddress" required oninput="autoDetectOfficerForIncident()" placeholder="VD: 150 Trần Phú" 
+                            class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Lĩnh vực chuyên đề *</label>
+                        <select id="incCategory" required class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 font-semibold">
+                            <option value="TTXH">Trật tự xã hội (TTXH)</option>
+                            <option value="MATUY">Tội phạm & Tệ nạn Ma túy</option>
+                            <option value="HINHSU">Đối tượng Quản lý / Hình sự</option>
+                            <option value="PCCC">An toàn PCCC & Giao thông</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Tự động nhận diện Tổ & CSKV phụ trách từ địa chỉ nhập vào -->
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[11px] font-bold text-blue-800">Tổ / Thôn (Tự động khớp)</label>
+                        <input type="text" id="incGroup" required placeholder="VD: TỔ 4 (TRƯỜNG CHINH CŨ)" class="w-full mt-0.5 px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-blue-800">CSKV Phụ trách *</label>
+                        <select id="incOfficer" required class="w-full mt-0.5 px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-semibold"></select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Họ tên Đối tượng liên quan *</label>
+                        <input type="text" id="incSubject" required placeholder="VD: Nguyễn Văn A (SN 1995)" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Mức độ theo dõi</label>
+                        <select id="incSeverity" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold">
+                            <option value="CAO">Nguy cơ cao (Đỏ)</option>
+                            <option value="TRUNGBINH">Theo dõi thường xuyên (Vàng)</option>
+                            <option value="DAXULY">Đã xử lý ổn định (Xanh)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Tên vụ việc & Nội dung tóm tắt *</label>
+                    <textarea id="incDescription" rows="3" required placeholder="Nhập tóm tắt nội dung vụ việc, tình trạng cư trú hoặc biện pháp nghiệp vụ..." class="w-full px-3 py-2 border border-slate-300 rounded-xl"></textarea>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                    <button type="button" onclick="closeIncidentModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold">Hủy</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow">
+                        <i class="fa-solid fa-floppy-disk mr-1"></i>Lưu Dữ Liệu ANTT
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 2: ADMIN THÊM / SỬA TUYẾN ĐƯỜNG & KHOẢNG SỐ NHÀ              -->
+    <!-- ================================================================= -->
+    <div id="addressModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
+            <div class="cand-gradient text-white px-5 py-3.5 flex items-center justify-between">
+                <h3 id="addressModalTitle" class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-road text-amber-400"></i>
+                    Cập Nhật Tuyến Đường & Số Nhà
+                </h3>
+                <button onclick="closeAddressModal()" class="text-slate-300 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form id="addressForm" onsubmit="saveAddressRecord(event)" class="p-5 space-y-3.5 text-xs sm:text-sm">
+                <input type="hidden" id="addrId">
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Tổ / Thôn & Khu vực *</label>
+                    <input type="text" id="addrGroup" list="groupListDatalist" required placeholder="VD: TỔ 1 (TRƯỜNG CHINH CŨ)" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                    <datalist id="groupListDatalist"></datalist>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Cán bộ CSKV Phụ trách *</label>
+                    <select id="addrOfficer" required class="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold"></select>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Tên đường / Hẻm *</label>
+                    <input type="text" id="addrStreet" required placeholder="VD: Trần Phú" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Khoảng số nhà phụ trách *</label>
+                    <input type="text" id="addrRange" required placeholder="VD: 70-202, 53-153 hoặc Cả đường" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                    <p class="text-[11px] text-slate-500 mt-1">
+                        Hỗ trợ nhập nhiều khoảng cách nhau dấu phẩy (VD: <code>01-57, 02-32</code>, <code>86 - hết</code>, hoặc <code>Cả đường</code>).
+                    </p>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                    <button type="button" onclick="closeAddressModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold">Hủy</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow">
+                        <i class="fa-solid fa-check mr-1"></i>Lưu Thay Đổi
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 3: ADMIN THÊM / SỬA CÁN BỘ CSKV                              -->
+    <!-- ================================================================= -->
+    <div id="officerModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
+            <div class="cand-gradient text-white px-5 py-3.5 flex items-center justify-between">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield text-amber-400"></i>
+                    Thông Tin Cán Bộ Cảnh Sát Khu Vực
+                </h3>
+                <button onclick="closeOfficerModal()" class="text-slate-300 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form id="officerForm" onsubmit="saveOfficerRecord(event)" class="p-5 space-y-3.5 text-xs sm:text-sm">
+                <input type="hidden" id="offOriginalName">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Họ và tên Cán bộ CSKV *</label>
+                    <input type="text" id="offName" required placeholder="VD: Nguyễn Tiến Khang" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Cấp bậc</label>
+                        <select id="offRank" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                            <option value="Thiếu tá">Thiếu tá</option>
+                            <option value="Đại úy">Đại úy</option>
+                            <option value="Thượng úy">Thượng úy</option>
+                            <option value="Trung úy">Trung úy</option>
+                            <option value="Trung tá">Trung tá</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Số điện thoại liên hệ *</label>
+                        <input type="text" id="offPhone" required placeholder="VD: 0905 123 456" class="w-full px-3 py-2 border border-slate-300 rounded-xl">
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                    <button type="button" onclick="closeOfficerModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold">Hủy</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow">Lưu Thông Tin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border-l-4 border-amber-400 items-center gap-3 text-xs sm:text-sm max-w-sm">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toastMessage" class="font-medium">Đã cập nhật dữ liệu thành công!</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 text-xs py-3 px-4 border-t border-slate-800 mt-auto">
+        <div class="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+                <strong class="text-white">CÔNG AN PHƯỜNG KON TUM - TỈNH QUẢNG NGÃI</strong> • Hệ thống Bản đồ số Quản lý Địa bàn & An ninh trật tự
+            </div>
+            <div class="flex items-center gap-4">
+                <span><i class="fa-solid fa-database text-amber-400 mr-1"></i>316 Tuyến đường/Số nhà đã chuẩn hóa</span>
+                <span><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>Bảo mật phân quyền 3 lớp</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ================================================================= -->
+    <!-- JAVASCRIPT: DỮ LIỆU GỐC 316 DÒNG & THUẬT TOÁN TRA CỨU - BẢN ĐỒ SỐ   -->
+    <!-- ================================================================= -->
+    <script>
+        // 1. DỮ LIỆU GỐC 316 BẢN GHI TỪ FILE EXCEL "DS CSKV.xlsx"
+        const RAW_EXCEL_DATA = `1|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Trần văn hai|227-309, 94-286
+2|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Đào Duy Từ|140-166
+3|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Bế văn đàn|Cả đường
+4|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Lê văn tám|Cả đường
+5|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Wừu|Cả đường
+6|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Diên hồng|Cả đường
+7|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Trần nhân tông|02- 62
+8|TỔ 1 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Trường chinh|17-75, 38-42
+9|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Nguyễn viết xuân|48-66
+10|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Lê lai|01-129
+11|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Trần nhân tông|122-248
+12|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Trần phú|225-259
+13|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Cù chính lan|1-37, 2-10
+14|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Hẻm 19 cù chính lan|Hẻm 19 cù chính lan
+15|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Hẻm 25 cù chính lan|Hẻm 25 cù chính lan
+16|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Hẻm 111 lê lai|Hẻm 111 lê lai
+17|TỔ 2 (TRƯỜNG CHINH CŨ)|Nguyễn Tiến Khang|Phan văn trị|01-61, 02-62
+18|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|LÊ ĐÌNH CHINH|Cả đường
+19|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|LÊ NGỌC HÂN|Cả đường
+20|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|TÔ VĨNH DIỆN|Cả đường
+21|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|NGÔ MÂY|Cả đường
+22|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|LÊ LAI|2-136
+23|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|TRẦN PHÚ|177-221
+24|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|TRƯỜNG CHINH|87-165
+25|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|CHU VĂN AN|Cả đường
+26|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|NGUYỄN VIẾT XUÂN|2-46
+27|TỔ 3 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|PHAN HUY CHÚ|1-53
+28|TỔ 4 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Trần Phú|70-202, 53-153
+29|TỔ 4 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Ure|335-409
+30|TỔ 4 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Trường Chinh|50-98
+31|TỔ 4 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Sư Vạn Hạnh|Cả đường
+32|TỔ 4 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Trần Khánh Dư|175-192
+33|TỔ 5 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Nơ Trang Long|cả đường
+34|TỔ 5 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Đinh Núp|cả đường
+35|TỔ 5 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Trần Phú|01-49, 02-72
+36|TỔ 5 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Duy Tân|Hẻm 307
+37|TỔ 5 (TRƯỜNG CHINH CŨ)|Nguyễn Xuân Tuấn|Ure|151-355
+38|THÔN SƠ LAM 1 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Đào Duy Từ|01-155,02-128
+39|THÔN SƠ LAM 1 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Trường Chinh|01-05, 02-10
+40|THÔN SƠ LAM 1 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Đoàn Khuê|01-131, 02-122
+41|THÔN SƠ LAM 1 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Trần Văn Ơn|01-57, 02-32
+42|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Trần Văn Hai|57-225
+43|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|A Ninh|01-137, 02-128
+44|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Hồ Trọng Hiếu|01-85, 02-96
+45|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Trần Đăng Ninh|02-118
+46|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Trường Chinh|08-34
+47|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Trần Văn Ơn|34-134, 59-127
+48|THÔN SƠ LAM 2 (TRƯỜNG CHINH CŨ)|Trần Trung Thành|Văn Cao|01-29, 02-26
+49|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Duy Tân|44-304, 01-307
+50|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Lương Văn Can|01-45
+51|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Thu Bồn|Cả đường
+52|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Bùi Xuân Phái|Cả đường
+53|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Trần Văn Hai|03-35, 52-74
+54|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Võ Nguyên Giáp|64-122
+55|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Ông Ích Khiêm|Cả đường
+56|THÔN KON TU 2 (TRƯỜNG CHINH CŨ)|Phan Thành Trung|Nguyễn Cảnh Chân|Cả đường
+57|TỔ 1 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|NGUYỄN HUỆ|494-540, 539-569
+58|TỔ 1 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Nguyễn Trãi|02-52, 01-51
+59|TỔ 1 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Ngô quyền|113-155
+60|TỔ 1 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|KaPaKơLơng|104-176
+61|TỔ 1 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Trần phú|455
+62|TỔ 2 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Lý thái tổ|02-80, 01-35
+63|TỔ 2 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Hoàng diệu|01-93, 02-48
+64|TỔ 2 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Nguyễn Huệ|105-543, 138-492
+65|TỔ 2 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Kapakolong|111-171
+66|TỔ 2 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Ngô quyền|85-119,
+67|TỔ 3 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Ngô Quyền|42-112
+68|TỔ 3 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Nguyễn Văn Trỗi|01-97, 48-94
+69|TỔ 3 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Lý Tự Trọng|02-66
+70|TỔ 3 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Nguyễn Huệ|404-452
+71|TỔ 3 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Hoàng Diệu|01-45
+72|TỔ 3 (THỐNG NHẤT CŨ)|Nguyễn Trường Hiệu|Hồng Bàng|01-55, 02-68
+73|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|Nguyển Huệ|01-09, 02-10
+74|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|nguyễn công trứ|Tổ 4
+75|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|trần hưng đạo|01-99
+76|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|yết kiêu|44-46
+77|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|lý tự trọng|01-69
+78|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|ngô quyền|01-33, 02-42, hẻm 2, hẻm 21, hẻm 24, hẻm 32
+79|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|trần cao vân|45-69, 28-92, hẻm 30, hẻm 55, hẻm 76
+80|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|đào duy từ|342-462, 393-523, hẻm 417, hẻm 421, hẻm 495
+81|TỔ 4 (THỐNG NHẤT CŨ)|Mai Văn Thông|Bắc cạn|283
+82|THÔN KON TUM KƠ NÂM (THỐNG NHẤT CŨ)|Trần Anh Trang|Nông Quốc Chấn|Cả đường
+83|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Ngô Quyền|76 - hết
+84|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Đặng Thái Thân|01-29, 02-08
+85|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Ka Pa Kơ Lơng|37-55, 52-86
+86|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Trần Hưng Đạo|183-235
+87|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Hồng Bàng|19-59, 36-70
+88|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Triệu Việt Vương|02-14, 01-35
+89|TỔ 5 (THỐNG NHẤT CŨ)|Phan Đức Thịnh|Nguyễn Văn Trỗi|02-76
+90|TỔ 6 (THỐNG NHẤT CŨ)|Trần Y Quỳnh Như|Nguyễn Đình Chiểu|02-74
+91|TỔ 6 (THỐNG NHẤT CŨ)|Trần Y Quỳnh Như|Trần Phú|423-457
+92|TỔ 6 (THỐNG NHẤT CŨ)|Trần Y Quỳnh Như|Ngô Quyền|136-200
+93|TỔ 6 (THỐNG NHẤT CŨ)|Trần Y Quỳnh Như|Trần Hưng Đạo|219-251
+94|TỔ 6 (THỐNG NHẤT CŨ)|Trần Y Quỳnh Như|Kơ pa Kơ Lơng|86 - hết
+95|THÔN KON HRACHOT (THỐNG NHẤT CŨ)|Nguyễn Mạnh Tuấn|Nguyễn Trãi|69-93, 62-68
+96|THÔN KON HRACHOT (THỐNG NHẤT CŨ)|Nguyễn Mạnh Tuấn|Lý Thái Tổ|02-92
+97|THÔN KON HRACHOT (THỐNG NHẤT CŨ)|Nguyễn Mạnh Tuấn|Siu Bleh|Cả đường
+98|THÔN KON KLOR (THẮNG LỢI CŨ)|Trần Đình Phương|Bắc Kạn|Bắc Kạn
+99|THÔN KON KLOR (THẮNG LỢI CŨ)|Trần Đình Phương|Nguyễn Huy Lung|01-45, 02-72
+100|THÔN KON KLOR (THẮNG LỢI CŨ)|Trần Đình Phương|Lương Khánh Thiện|Cả đường
+101|THÔN KONTUM KƠPƠNG (THẮNG LỢI CŨ)|Võ Trung Cường|Bắc Kạn|96-250, 135-267
+102|THÔN KONTUM KƠPƠNG (THẮNG LỢI CŨ)|Võ Trung Cường|Nguyễn Huy Lung|47-117, 74-146
+103|THÔN KONTUM KƠPƠNG (THẮNG LỢI CŨ)|Võ Trung Cường|Lê Hoàn|cả đường
+104|THÔN KONTUM KƠPƠNG (THẮNG LỢI CŨ)|Võ Trung Cường|Bùi Đạt|01-07, 02-30
+105|THÔN KONTUM KƠPƠNG (THẮNG LỢI CŨ)|Võ Trung Cường|A Gió|Cả đường
+106|THÔN KONTUM KƠPƠNG (THẮNG LỢI CŨ)|Võ Trung Cường|Lê Viết Lượng|03-101
+107|TỔ 1 (THẮNG LỢI CŨ)|Trần Hoàng Mai|Trần hưng đạo|146-236
+108|TỔ 1 (THẮNG LỢI CŨ)|Trần Hoàng Mai|Trần phú|347-419
+109|TỔ 1 (THẮNG LỢI CŨ)|Trần Hoàng Mai|Tăng bạt hổ|0-44
+110|TỔ 1 (THẮNG LỢI CŨ)|Trần Hoàng Mai|Ka pa kơlơng|0-50, 1-41
+111|TỔ 1 (THẮNG LỢI CŨ)|Trần Hoàng Mai|Phan chu trinh|137-207
+112|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Trần Hưng Đạo|02-142
+113|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Đào Duy Từ|286-348, 321-387
+114|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Phan Chu Trinh|01-135
+115|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Yết Kiêu|02-42, 01-45
+116|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Ngô Tiến Dũng|02-36, 01-49
+117|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Trần Cao Vân|02-24, 01-39B
+118|TỔ 2 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Lý Tự Trọng|01 - 03
+119|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Phan Chu Trinh|02 - 88
+120|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Hồ Tùng Mậu|01-95, 02-116
+121|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Thi Sách|01-99, 02-172
+122|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Bà Triệu|01-157, 30-122
+123|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Đào Duy Từ|236-286
+124|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Lê Văn Hưu|01-09, 02-14
+125|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Võ Thị Sáu|01 - 19
+126|TỔ 3 (THẮNG LỢI CŨ)|Huỳnh Việt Hải|Nguyễn Hữu Cầu|57-77
+127|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Đào Duy Từ|153-321, 182-216
+128|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|A Gió|02-26, 05-37
+129|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Lê Hữu Trác|01-27, 02-38
+130|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Cao Thắng|02-34, 01-33
+131|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Cao Bá Quát|02-76, 01-65
+132|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Nguyễn Huu Lung|24-86
+133|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Nguyễn Khuyến|02-36, 01-21
+134|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Lê Hoàn|Cả đường
+135|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Bùi Đạt|Cả đường
+136|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Lê Viết Lượng|Cả đường
+137|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Nguyễn Bá Ngọc|02-38, 01-15
+138|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Trần Văn Hai|311-345
+139|TỔ 4 (THẮNG LỢI CŨ)|Đặng Văn Sơn|Nguyễn Đức Cảnh|Cả đường
+140|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Trần Nhân Tông|17-121
+141|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Hùng Vương|71-147, 72-178
+142|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Đống Đa|02-82, 01-111
+143|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Chu Văn Tấn|10-68, 17-71
+144|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Ba Đình|16-64, 07-169
+145|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Bà Triệu|10-28
+146|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Nguyễn Viết Xuân|05-59
+147|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Đỗ Nhuận|14-26, 03-15
+148|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Nguyễn Hữu Cầu|04-46, 09-47
+149|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Đỗ Xuân Hợp|06-34, 01-33
+150|TỔ 5 (THẮNG LỢI CŨ)|Nguyễn Thị Thu Khuyên|Đào Duy Từ|220-234
+151|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Trần Phú|335-345
+152|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Bà Triệu|163-273, 130-234
+153|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Phan Chu Trinh|90-200
+154|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Hồ Tùng Mậu|99-177, 120-198
+155|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Thi Sách|103-281, 174-312
+156|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Nguyễn Hữu Cầu|57-73, 52-60
+157|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Nguyễn Viết Xuân|65-103, 74-106
+158|TỔ 6 (THẮNG LỢI CŨ)|Bùi Quang Huy|Trần Quốc Toản|01-29, 02-32
+159|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Trần Phú|263-333
+160|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Nguyễn Viết Xuân|61-63
+161|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Đống Đa|129-171, 144-230
+162|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Phan Huy Chú|01-11, 02-16
+163|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Hùng Vương|193-291, 234-314
+164|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Trần Nhân Tông|125-227
+165|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Lê Quý Đôn|01-33, 02-42
+166|TỔ 7 (THẮNG LỢI CŨ)|Bùi Quang Huy|Hẻm 200 Bà Triệu|Hẻm 200 Bà Triệu
+167|TỔ 1 (QUYẾT THẮNG CŨ)|Trịnh Thị Tường Vy|Trương Quang Trọng|02-48, 01-69
+168|TỔ 1 (QUYẾT THẮNG CŨ)|Trịnh Thị Tường Vy|Phan Đình Phùng|994-1012
+169|TỔ 1 (QUYẾT THẮNG CŨ)|Trịnh Thị Tường Vy|Nguyễn Huệ|636-648
+170|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Nguyễn Huệ|575-637, 546-632
+171|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Tố Hữu|01-53, 02-20
+172|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Lê Hồng Phong|220-286, 315-383
+173|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Ngô Quyền|159-207
+174|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Nguyễn Bỉnh Khiêm|01-17
+175|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Hoàng Hoa Thám|01-51, 02-18
+176|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Bùi Thị Xuân|01-31, 02-18
+177|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Phạm Ngũ Lão|01-19, 02-24
+178|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Hoàng Văn Thụ|111-137, 148-158
+179|TỔ 2 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Bạch Đằng|02-26
+180|TỔ 3 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Phan Đình Phùng|938-992
+181|TỔ 3 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Trần Hưng Đạo|409-461, 410-440
+182|TỔ 3 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Phan Bội Châu|01-35, 02-16
+183|TỔ 3 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Hai Bà Trưng|207-247, 296-330
+184|TỔ 3 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Nguyễn Thái Học|40-42, 25-55
+185|TỔ 3 (QUYẾT THẮNG CŨ)|Bùi Văn Hương|Lê Lợi|117-155
+186|TỔ 4 (QUYẾT THẮNG CŨ)|LƯU NGUYỄN XUÂN HOÀNG|PHAN CHU TRINH|351-391
+187|TỔ 4 (QUYẾT THẮNG CŨ)|LƯU NGUYỄN XUÂN HOÀNG|PHAN ĐÌNH PHÙNG|846 - 936
+188|TỔ 4 (QUYẾT THẮNG CŨ)|LƯU NGUYỄN XUÂN HOÀNG|NGUYỄN THÁI HỌC|01 - 23, 02 - 32
+189|TỔ 4 (QUYẾT THẮNG CŨ)|LƯU NGUYỄN XUÂN HOÀNG|BÀ TRIỆU|377-431
+190|TỔ 4 (QUYẾT THẮNG CŨ)|LƯU NGUYỄN XUÂN HOÀNG|HAI BÀ TRƯNG|135 - 179, 240 - 290
+191|TỔ 4 (QUYẾT THẮNG CŨ)|LƯU NGUYỄN XUÂN HOÀNG|LÊ LỢI|157 - 207, 204 - 238
+192|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Nguyễn Đình Chiểu|07-43, 74-124
+193|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Quang Khải|64-66, 39-53
+194|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Hưng Đạo|247-405
+195|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Hoàng Văn Thụ|59-95, 74-148
+196|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Phú|628-640
+197|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Ngô Quyền|202-252
+198|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Phan Đình Phùng|1077-1099
+199|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Bình Trọng|05-15, 40-64
+200|TỔ 5 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Lê Hồng Phong|162-212, 247-313
+201|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Hoàng Văn Thụ|28-68
+202|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Bình Trọng|01-03, 02-36
+203|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Lê Lợi|45-65
+204|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Lê Hồng Phong|126-160, 233-245
+205|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Hưng Đạo|242-406
+206|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Đoàn Thị Điểm|167-195, 162-208
+207|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Phan Đình Phùng|1053-1073
+208|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Phú|586-638
+209|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Quang Khải|15-37, 18-44
+210|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|LÊ HỒNG PHONG|90 - 122
+211|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|BÀ TRIỆU|347 - 373
+212|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|PHAN ĐÌNH PHÙNG|921 - 1049
+213|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|LÊ LỢI|120 - 186
+214|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|PHAN CHU TRINH|301 - 351
+215|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|ĐOÀN THỊ ĐIỂM|89 - 161
+216|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|LÝ THƯỜNG KIỆT|53 - 105
+217|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|NGUYỄN DU|01 - 23
+218|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|TRẦN QUANG KHẢI|01 - 11, 02 - 16
+219|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|NGUYỄN THƯỢNG HIỀN|01-51, 02- 48
+220|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|NGUYỄN GIA THIỀU|01- 77, 02 - 80
+221|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|LÊ LỢI|02 - 116
+222|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|TRẦN PHÚ|494 - 582
+223|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|BÀ TRIỆU|279 - 345
+224|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|LÊ HỒNG PHONG|119 - 227
+225|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|MẠC ĐĨNH CHI|85 - 111, 72 - 74
+226|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|HOÀNG VĂN THỤ|01 - 19, 02 - 26
+227|TỔ 8 (QUYẾT THẮNG CŨ)|La Ngọc Phước|PHAN CHU TRINH|209 - 297, 202 - 274
+228|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Đống Đa|171-271, 230-342
+229|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Lê Quý Đôn|35-109, 44-178
+230|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Hùng Vương|291-407
+231|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Trần Phú|440-490
+232|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Bà Triệu|230-290
+233|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Lê Hồng Phong|87-115
+234|TỔ 1 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Mạc Đĩnh Chi|27-83, 20-70
+235|TỔ 2 (QUANG TRUNG CŨ)|Hoàng Yến|Trần Nhân Tông|229-353, 250-374
+236|TỔ 2 (QUANG TRUNG CŨ)|Hoàng Yến|Lê Hồng Phong|03-85
+237|TỔ 2 (QUANG TRUNG CŨ)|Hoàng Yến|Hùng Vương|316-432
+238|TỔ 2 (QUANG TRUNG CŨ)|Hoàng Yến|Trần Phú|358-432
+239|TỔ 2 (QUANG TRUNG CŨ)|Hoàng Yến|Mạc Đĩnh Chi|01-25, 02-16
+240|TỔ 3 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Trần Phú|284-356
+241|TỔ 3 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Lê Văn Hiến|02-6, 01-17
+242|TỔ 3 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Ure|278-328, 455-511
+243|TỔ 3 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Trường Chinh|167-205
+244|TỔ 3 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Trần Nguyễn Hãn|34-100, 13-55
+245|TỔ 4 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Phan Đình Phùng|809-917, 804-844
+246|TỔ 4 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Lý Thường Kiệt|01-51, 02-48
+247|TỔ 4 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Đoàn Thị Điểm|01-75, 02-66
+248|TỔ 4 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Hùng Vương|409-457, 438-516
+249|TỔ 4 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|TÊN ĐƯỜNG|02-68
+250|TỔ 4 (QUANG TRUNG CŨ)|Phạm Hữu Đắc|Bà Triệu|292-342
+251|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Phan Đình Phùng|768-804
+252|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Hùng Vương|522-592, 461-597
+253|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Hoàng Thị Loan|310- hết, 279-367
+254|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Bà Triệu|348-394
+255|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Phù Đổng|17-23, 20-40
+256|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Hai Bà Trưng|89-133
+257|TỔ 5 (QUANG TRUNG CŨ)|Vũ Công Tài|Hà Huy Tập|199-275
+258|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Hoàng Thị Loan|112-310
+259|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Hùng Vương|598-660
+260|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Hà Huy Tập|01-197
+261|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Nguyễn Sinh Sắc|97-147, 60-86
+262|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Âu Cơ|02-52, 01-47
+263|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Phạm Ngọc Thạch|Cả đường
+264|TỔ 6 (QUANG TRUNG CŨ)|Võ Tá Quốc|Huỳnh Thúc Kháng|37-45
+265|TỔ 7 (QUANG TRUNG CŨ)|Chưa phân công|Chưa cập nhật|Chưa cập nhật
+266|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Phan Đình Phùng|592 - 678
+267|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Phạm Hồng Thái|02 - 64
+268|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hoàng Thị Loan|113 - 189
+269|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Võ Văn Dũng|01 - 47, 02 - 46
+270|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Huỳnh Thúc Kháng|01 - 35
+271|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 01 Huỳnh Thúc Kháng|01 - 23, 02 - 28
+272|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 40 Phạm Hồng Thái|01 - 07, 02 - 10
+273|TỔ 8 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 137 Hoàng Thị Loan|01 - 09
+274|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hà Huy Tập|02 - 168, 188
+275|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Nguyễn Văn Cừ|01 - 117, 02 - 166
+276|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Thái Phiên|01 - 53, 02 - 98
+277|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Huỳnh Đăng Thơ|129 - 251
+278|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Huỳnh Thúc Kháng|47 - 121
+279|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Âu Cơ|47 - 103, 58 - 118
+280|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Nguyễn Sinh Sắc|88 - 166, 147 - 199
+281|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 106 Hà Huy Tập|01 - 15
+282|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 146 Hà Huy Tập|01 - 19
+283|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 54 Hà Huy Tập|số 01 và 02
+284|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 122 Hà Huy Tập|02 - 08
+285|TỔ 9 (QUANG TRUNG CŨ)|Nguyễn Xuân Bằng|Hẻm 81 Âu Cơ|01 - 21, 02 - 18
+286|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Huỳnh Thúc Kháng|10-84
+287|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Lạc Long Quân|05 - 23
+288|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Hoàng Thị Loan|01-111, 70-102
+289|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Phan Đình Phùng|418-580
+290|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Lý Thường Kiệt|55-77, 50-84
+291|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Nguyễn Thiện Thuật|169-205, 176-180
+292|TỔ 10 (QUANG TRUNG CŨ)|Tô Xuân Lượng|Đào Duy Anh|01-19, 02-08
+293|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Lạc Long Quân|126-308, 147-267
+294|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Trần Hưng Đạo|Hẻm 219
+295|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Âu Cơ|103-131, 128-140
+296|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Huỳnh Thúc Kháng|137-155
+297|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Hai Bà Trưng|01-29, 02-32
+298|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Huỳnh Đăng Thơ|102-216
+299|TỔ 11 (QUANG TRUNG CŨ)|Hứa Đại Phong|Nguyễn Gia Thiều|46-52
+300|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Lạc Long Quân|02 - 126, 33 -127
+301|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 104 Lạc Long Quân|01 - 11
+302|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 114 Lạc Long Quân|02 - 12, 01 - 09
+303|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 02 Lạc Long Quân|02 - 14
+304|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 126 Lạc Long Quân|02 - 12
+305|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 45 Lạc Long Quân|02 - 16, 01 - 29
+306|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Huỳnh Thúc Kháng|98 - 156
+307|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Huỳnh Đăng Thơ|26 - 98, 51 - 127
+308|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 72 Huỳnh Đăng Thơ|02 - 12, 01 - 03
+309|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hẻm 105 Huỳnh Đăng Thơ|02 - 18, 01 - 17
+310|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Ngô Miên|01 - 47
+311|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Hoàng Thị Loan|02 - 38
+312|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Đào Duy Anh|12 - 28, 23A - 37
+313|TỔ 12 (QUANG TRUNG CŨ)|Nguyễn Ngọc Hảo|Lưu Trọng Lư|04 - 10, 01 - 13
+314|THÔN PLEIĐÔN (QUANG TRUNG CŨ)|Đặng Quốc Hưng|Hai Bà Trưng|02-88
+315|THÔN PLEIĐÔN (QUANG TRUNG CŨ)|Đặng Quốc Hưng|Nguyễn Văn Cừ|Nguyễn Văn Cừ
+316|THÔN PLEITƠNGHIA (QUANG TRUNG CŨ)|Đặng Quốc Hưng|Hai Bà Trưng|90 - 238`;
+
+        // 2. ĐỊA GIỚI KHÔNG GIAN 5 KHU VỰC PHƯỜNG CŨ SÁP NHẬP VÀO PHƯỜNG KON TUM
+        const ZONE_POLYGONS = {
+            "TRƯỜNG CHINH CŨ": {
+                name: "Khu vực Trường Chinh (Đông Bắc)",
+                color: "#2563eb",
+                center: [14.3635, 108.0155],
+                coords: [[14.3560, 108.0060], [14.3710, 108.0060], [14.3710, 108.0260], [14.3560, 108.0260]]
+            },
+            "THỐNG NHẤT CŨ": {
+                name: "Khu vực Thống Nhất (Đông Nam - Ven sông Đăk Bla)",
+                color: "#059669",
+                center: [14.3445, 108.0135],
+                coords: [[14.3370, 108.0040], [14.3500, 108.0040], [14.3500, 108.0230], [14.3370, 108.0230]]
+            },
+            "THẮNG LỢI CŨ": {
+                name: "Khu vực Thắng Lợi (Trung tâm Đông)",
+                color: "#d97706",
+                center: [14.3530, 108.0150],
+                coords: [[14.3500, 108.0050], [14.3560, 108.0050], [14.3560, 108.0250], [14.3500, 108.0250]]
+            },
+            "QUYẾT THẮNG CŨ": {
+                name: "Khu vực Quyết Thắng (Trung tâm Tây)",
+                color: "#7c3aed",
+                center: [14.3510, 107.9985],
+                coords: [[14.3430, 107.9900], [14.3570, 107.9900], [14.3570, 108.0050], [14.3430, 108.0050]]
+            },
+            "QUANG TRUNG CŨ": {
+                name: "Khu vực Quang Trung (Tây Bắc)",
+                color: "#e11d48",
+                center: [14.3650, 107.9965],
+                coords: [[14.3570, 107.9880], [14.3740, 107.9880], [14.3740, 108.0060], [14.3570, 108.0060]]
+            }
+        };
+
+        // Dữ liệu vụ việc ANTT mẫu ban đầu (chỉ Admin & CSKV thấy)
+        const DEFAULT_INCIDENTS = [
+            {
+                id: "ANTT-01",
+                date: "18/10/2026",
+                category: "MATUY",
+                address: "150 Trần Phú",
+                group: "TỔ 4 (TRƯỜNG CHINH CŨ)",
+                officer: "Nguyễn Xuân Tuấn",
+                subject: "A.K.L (SN 1998)",
+                severity: "CAO",
+                description: "Đối tượng có biểu hiện tụ tập nghi vấn sử dụng trái phép chất ma túy, đang lập hồ sơ theo dõi nghiệp vụ.",
+                lat: 14.3622,
+                lng: 108.0124
+            },
+            {
+                id: "ANTT-02",
+                date: "19/10/2026",
+                category: "TTXH",
+                address: "48 Nguyễn Viết Xuân",
+                group: "TỔ 2 (TRƯỜNG CHINH CŨ)",
+                officer: "Nguyễn Tiến Khang",
+                subject: "Trần Văn H (SN 1991)",
+                severity: "TRUNGBINH",
+                description: "Gây rối trật tự công cộng đêm khuya, đã gọi hỏi răn đe và cho ký cam kết không tái phạm.",
+                lat: 14.3645,
+                lng: 108.0168
+            },
+            {
+                id: "ANTT-03",
+                date: "15/10/2026",
+                category: "HINHSU",
+                address: "95 Ngô Quyền",
+                group: "TỔ 2 (THỐNG NHẤT CŨ)",
+                officer: "Nguyễn Trường Hiệu",
+                subject: "Lê Minh T (SN 1989)",
+                severity: "CAO",
+                description: "Đối tượng chấp hành xong án phạt tù trở về địa phương, thuộc diện quản lý giáo dục tại cộng đồng.",
+                lat: 14.3458,
+                lng: 108.0112
+            },
+            {
+                id: "ANTT-04",
+                date: "16/10/2026",
+                category: "PCCC",
+                address: "250 Bà Triệu",
+                group: "TỔ 6 (THẮNG LỢI CŨ)",
+                officer: "Bùi Quang Huy",
+                subject: "Cơ sở kinh doanh K.T",
+                severity: "DAXULY",
+                description: "Kiểm tra nhắc nhở trang bị bổ sung bình chữa cháy xách tay và lối thoát nạn tầng 2.",
+                lat: 14.3538,
+                lng: 108.0135
+            },
+            {
+                id: "ANTT-05",
+                date: "19/10/2026",
+                category: "MATUY",
+                address: "950 Phan Đình Phùng",
+                group: "TỔ 3 (QUYẾT THẮNG CŨ)",
+                officer: "Bùi Văn Hương",
+                subject: "Phạm Quốc Đ (SN 2001)",
+                severity: "CAO",
+                description: "Điểm có nguy cơ phức tạp về ma túy, CSKV phối hợp tổ tuần tra kiểm soát chặt ban đêm.",
+                lat: 14.3515,
+                lng: 107.9972
+            },
+            {
+                id: "ANTT-06",
+                date: "20/10/2026",
+                category: "TTXH",
+                address: "120 Hoàng Thị Loan",
+                group: "TỔ 6 (QUANG TRUNG CŨ)",
+                officer: "Võ Tá Quốc",
+                subject: "Nguyễn Hoàng V (SN 1994)",
+                severity: "TRUNGBINH",
+                description: "Tranh chấp dân sự tiềm ẩn nguy cơ mất ANTT tại khu dân cư, đã tổ chức hòa giải cơ sở.",
+                lat: 14.3642,
+                lng: 107.9955
+            }
+        ];
+
+        // BIẾN TRẠNG THÁI TOÀN CỤC
+        let addressDB = [];
+        let officersDB = {};
+        let incidentsDB = [];
+        let currentRole = 'GUEST'; // 'GUEST' | 'CSKV' | 'ADMIN'
+        let currentCskvUser = 'Nguyễn Tiến Khang';
+        let currentTab = 'MAP_LOOKUP';
+        let currentIncidentCatFilter = 'ALL';
+
+        // Biến Bản đồ Leaflet
+        let map;
+        let zoneLayersGroup;
+        let lookupMarkersGroup;
+        let incidentMarkersGroup;
+
+        // HÀM CHUẨN HÓA TIẾNG VIỆT & CHỮ HOA/THƯỜNG
+        function normalizeVN(str) {
+            if (!str) return "";
+            return str.toString()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function toTitleCaseStreet(str) {
+            if (!str) return "";
+            return str.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        }
+
+        function normalizeOfficerName(name) {
+            if (!name) return "Chưa phân công";
+            const clean = name.trim().replace(/\s+/g, ' ');
+            if (clean.toUpperCase() === "LƯU NGUYỄN XUÂN HOÀNG") return "Lưu Nguyễn Xuân Hoàng";
+            return clean;
+        }
+
+        function extractZoneFromGroup(groupStr) {
+            const upper = (groupStr || "").toUpperCase();
+            if (upper.includes("TRƯỜNG CHINH")) return "TRƯỜNG CHINH CŨ";
+            if (upper.includes("THỐNG NHẤT")) return "THỐNG NHẤT CŨ";
+            if (upper.includes("THẮNG LỢI")) return "THẮNG LỢI CŨ";
+            if (upper.includes("QUYẾT THẮNG")) return "QUYẾT THẮNG CŨ";
+            if (upper.includes("QUANG TRUNG")) return "QUANG TRUNG CŨ";
+            return "TRƯỜNG CHINH CŨ";
+        }
+
+        // Tạo tọa độ nhất quán cho từng Tổ/Thôn và tuyến đường trong khu vực
+        function getCoordinatesForRecord(recordId, groupStr) {
+            const zoneKey = extractZoneFromGroup(groupStr);
+            const zone = ZONE_POLYGONS[zoneKey] || ZONE_POLYGONS["TRƯỜNG CHINH CŨ"];
+            const seed = (recordId * 9301 + 49297) % 233280;
+            const seed2 = (recordId * 49297 + 9301) % 233280;
+            const offsetLat = ((seed / 233280) - 0.5) * 0.0085;
+            const offsetLng = ((seed2 / 233280) - 0.5) * 0.0125;
+            return [zone.center[0] + offsetLat, zone.center[1] + offsetLng];
+        }
+
+        // KHỞI TẠO CƠ SỞ DỮ LIỆU TỪ LOCALSTORAGE HOẶC DỮ LIỆU GỐC 316 DÒNG
+        function initDatabase() {
+            const savedAddr = localStorage.getItem('KONTUM_ADDR_DB_V4');
+            const savedOfficers = localStorage.getItem('KONTUM_OFFICERS_DB_V4');
+            const savedIncidents = localStorage.getItem('KONTUM_INCIDENTS_DB_V4');
+
+            if (savedAddr) {
+                addressDB = JSON.parse(savedAddr);
+            } else {
+                addressDB = RAW_EXCEL_DATA.trim().split('\n').map(line => {
+                    const parts = line.split('|');
+                    const id = parseInt(parts[0], 10);
+                    const group = parts[1].trim();
+                    const officer = normalizeOfficerName(parts[2]);
+                    const street = parts[3].trim();
+                    const range = parts[4].trim();
+                    const [lat, lng] = getCoordinatesForRecord(id, group);
+                    return { id, group, officer, street, range, zone: extractZoneFromGroup(group), lat, lng };
+                });
+                localStorage.setItem('KONTUM_ADDR_DB_V4', JSON.stringify(addressDB));
+            }
+
+            if (savedOfficers) {
+                officersDB = JSON.parse(savedOfficers);
+            } else {
+                officersDB = {};
+                const ranks = ["Đại úy", "Thượng úy", "Thiếu tá", "Đại úy", "Thượng úy"];
+                let idx = 0;
+                addressDB.forEach(item => {
+                    if (!officersDB[item.officer]) {
+                        const phoneSuffix = String(210 + idx * 17).padStart(3, '0') + ' ' + String(345 + idx * 23).slice(0, 3);
+                        officersDB[item.officer] = {
+                            name: item.officer,
+                            rank: item.officer === "Chưa phân công" ? "Chưa rõ" : ranks[idx % ranks.length],
+                            phone: item.officer === "Chưa phân công" ? "0260 3862 345" : `0905 ${phoneSuffix}`
+                        };
+                        idx++;
+                    }
+                });
+                localStorage.setItem('KONTUM_OFFICERS_DB_V4', JSON.stringify(officersDB));
+            }
+
+            if (savedIncidents) {
+                incidentsDB = JSON.parse(savedIncidents);
+            } else {
+                incidentsDB = DEFAULT_INCIDENTS;
+                localStorage.setItem('KONTUM_INCIDENTS_DB_V4', JSON.stringify(incidentsDB));
+            }
+
+            populateDropdownLists();
+            updateKPIStats();
+        }
+
+        function saveAllToStorage() {
+            localStorage.setItem('KONTUM_ADDR_DB_V4', JSON.stringify(addressDB));
+            localStorage.setItem('KONTUM_OFFICERS_DB_V4', JSON.stringify(officersDB));
+            localStorage.setItem('KONTUM_INCIDENTS_DB_V4', JSON.stringify(incidentsDB));
+            populateDropdownLists();
+            updateKPIStats();
+        }
+
+        // ĐIỀN DỮ LIỆU VÀO CÁC DATALIST & SELECT DROPDOWN
+        function populateDropdownLists() {
+            // 1. Datalist Tên đường duy nhất
+            const streetSet = new Map();
+            const groupSet = new Set();
+            const officerSet = new Set();
+
+            addressDB.forEach(r => {
+                const normS = normalizeVN(r.street);
+                if (!streetSet.has(normS)) {
+                    streetSet.set(normS, toTitleCaseStreet(r.street));
+                }
+                groupSet.add(r.group);
+                officerSet.add(r.officer);
+            });
+
+            Object.keys(officersDB).forEach(o => officerSet.add(o));
+
+            const streetDatalist = document.getElementById('streetListDatalist');
+            streetDatalist.innerHTML = Array.from(streetSet.values()).sort((a,b) => a.localeCompare(b, 'vi'))
+                .map(s => `<option value="${s}">`).join('');
+
+            const groupDatalist = document.getElementById('groupListDatalist');
+            groupDatalist.innerHTML = Array.from(groupSet).sort((a,b) => a.localeCompare(b, 'vi'))
+                .map(g => `<option value="${g}">`).join('');
+
+            const sortedOfficers = Array.from(officerSet).filter(o => o !== "Chưa phân công").sort((a,b) => a.localeCompare(b, 'vi'));
+            sortedOfficers.push("Chưa phân công");
+
+            // Select CSKV ở Header
+            const activeCskvSelect = document.getElementById('activeCskvSelect');
+            activeCskvSelect.innerHTML = sortedOfficers.filter(o => o !== "Chưa phân công")
+                .map(o => `<option value="${o}" ${o === currentCskvUser ? 'selected' : ''}>Đ/c ${o}</option>`).join('');
+
+            // Select CSKV ở Admin Filter
+            const adminOfficerFilter = document.getElementById('adminOfficerFilter');
+            const prevFilterVal = adminOfficerFilter.value || 'ALL';
+            adminOfficerFilter.innerHTML = `<option value="ALL">Tất cả Cán bộ CSKV (${sortedOfficers.length - 1})</option>` +
+                sortedOfficers.map(o => `<option value="${o}">${o}</option>`).join('');
+            adminOfficerFilter.value = prevFilterVal;
+
+            // Select CSKV trong Modal Địa bàn & Vụ việc
+            const officerOptionsHtml = sortedOfficers.map(o => `<option value="${o}">${o}</option>`).join('');
+            document.getElementById('addrOfficer').innerHTML = officerOptionsHtml;
+            document.getElementById('incOfficer').innerHTML = officerOptionsHtml;
+        }
+
+        function updateKPIStats() {
+            document.getElementById('statTotalRoutes').textContent = addressDB.length;
+            const uniqueOfficers = new Set(addressDB.map(r => r.officer).filter(o => o !== "Chưa phân công"));
+            document.getElementById('statTotalOfficers').textContent = `${uniqueOfficers.size} CBCS`;
+            const uniqueGroups = new Set(addressDB.map(r => r.group));
+            document.getElementById('statTotalGroups').textContent = `${uniqueGroups.size} Tổ/Thôn`;
+
+            // Số vụ việc tùy theo Role
+            const visibleIncidents = getVisibleIncidentsForRole();
+            document.getElementById('statTotalIncidents').textContent = visibleIncidents.length;
+            document.getElementById('incidentCountBadge').textContent = visibleIncidents.length;
+        }
+
+        // =========================================================================
+        // 3. THUẬT TOÁN PHÂN TÍCH KHOẢNG SỐ NHÀ THÔNG MINH (CHẴN / LẺ / HẺM / CẢ ĐƯỜNG)
+        // =========================================================================
+        function checkHouseNumberMatch(houseInputStr, recordRangeStr, recordStreetStr) {
+            if (!houseInputStr || !houseInputStr.trim()) {
+                return { matched: true, exactType: 'STREET_ONLY', reason: 'Khớp tên tuyến đường' };
+            }
+
+            const cleanInput = normalizeVN(houseInputStr);
+            const cleanRange = normalizeVN(recordRangeStr);
+            const cleanStreet = normalizeVN(recordStreetStr);
+
+            // Trường hợp 1: Tuyến đường ghi "Cả đường"
+            if (cleanRange.includes('ca duong') || cleanRange === cleanStreet) {
+                return { matched: true, exactType: 'EXACT_ALL_STREET', reason: 'Phụ trách toàn bộ tuyến đường (Cả đường)' };
+            }
+
+            // Kiểm tra nếu người dùng tìm theo Hẻm (VD: "hẻm 19", "hẻm 307")
+            const hemMatchInput = cleanInput.match(/hem\s*(\d+[a-z]*)/i);
+            if (hemMatchInput) {
+                const hemNum = hemMatchInput[1];
+                if (cleanRange.includes(`hem ${hemNum}`) || cleanStreet.includes(`hem ${hemNum}`)) {
+                    return { matched: true, exactType: 'EXACT_ALLEY', reason: `Khớp chính xác Hẻm ${hemNum.toUpperCase()}` };
+                }
+            }
+
+            // Trích xuất số nhà nguyên từ input
+            const numMatch = cleanInput.match(/(\d+)/);
+            if (!numMatch) {
+                if (cleanRange.includes(cleanInput)) {
+                    return { matched: true, exactType: 'EXACT_TEXT', reason: `Khớp mô tả "${recordRangeStr}"` };
+                }
+                return { matched: false };
+            }
+
+            const targetNum = parseInt(numMatch[1], 10);
+
+            // Tách các phân đoạn cách nhau bằng dấu phẩy (VD: "70-202, 53-153")
+            const segments = cleanRange.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+
+            for (const seg of segments) {
+                // Nếu là hẻm trong segment mà người dùng không gõ chữ hẻm thì bỏ qua segment hẻm
+                if (seg.includes('hem') && !cleanInput.includes('hem')) {
+                    continue;
+                }
+
+                // Kiểm tra dạng "A - hết" (VD: "76 - hết", "310- hết")
+                const toEndMatch = seg.match(/(\d+)\s*-\s*het/);
+                if (toEndMatch) {
+                    const startVal = parseInt(toEndMatch[1], 10);
+                    if (targetNum >= startVal) {
+                        const sameParity = (targetNum % 2) === (startVal % 2);
+                        if (sameParity) {
+                            return {
+                                matched: true,
+                                exactType: 'EXACT_RANGE_PARITY',
+                                reason: `Số nhà ${targetNum} (${targetNum % 2 === 0 ? 'Chẵn' : 'Lẻ'}) thuộc đoạn [${startVal} - Hết]`
+                            };
+                        } else {
+                            return {
+                                matched: true,
+                                exactType: 'APPROX_RANGE',
+                                reason: `Số nhà ${targetNum} nằm trong đoạn [${startVal} - Hết]`
+                            };
+                        }
+                    }
+                }
+
+                // Kiểm tra dạng khoảng "A - B" (VD: "70-202", "01-129")
+                const rangeMatch = seg.match(/(\d+)[a-z]*\s*-\s*(\d+)[a-z]*/);
+                if (rangeMatch) {
+                    const a = parseInt(rangeMatch[1], 10);
+                    const b = parseInt(rangeMatch[2], 10);
+                    const min = Math.min(a, b);
+                    const max = Math.max(a, b);
+
+                    if (targetNum >= min && targetNum <= max) {
+                        const aEven = a % 2 === 0;
+                        const bEven = b % 2 === 0;
+                        const targetEven = targetNum % 2 === 0;
+
+                        // Nếu cả 2 đầu mút cùng Chẵn hoặc cùng Lẻ -> kiểm tra tính Chẵn/Lẻ của số nhà
+                        if (aEven === bEven) {
+                            if (targetEven === aEven) {
+                                return {
+                                    matched: true,
+                                    exactType: 'EXACT_RANGE_PARITY',
+                                    reason: `Số nhà ${targetNum} (dãy ${targetEven ? 'Chẵn' : 'Lẻ'}) thuộc khoảng [${min} - ${max}]`
+                                };
+                            }
+                        } else {
+                            // Đầu chẵn đầu lẻ (VD: 175-192) -> Khớp mọi số trong khoảng
+                            return {
+                                matched: true,
+                                exactType: 'EXACT_RANGE_MIXED',
+                                reason: `Số nhà ${targetNum} thuộc khoảng [${min} - ${max}]`
+                            };
+                        }
+                    }
+                    continue;
+                }
+
+                // Kiểm tra số đơn lẻ (VD: "455", "283", "số 01 và 02")
+                const singleNums = seg.match(/\d+/g);
+                if (singleNums) {
+                    for (const sn of singleNums) {
+                        if (parseInt(sn, 10) === targetNum) {
+                            return {
+                                matched: true,
+                                exactType: 'EXACT_SINGLE',
+                                reason: `Khớp chính xác số nhà ${targetNum}`
+                            };
+                        }
+                    }
+                }
+            }
+
+            return { matched: false };
+        }
+
+        // Tách chuỗi nhập tự do (VD: "150 Trần Phú", "Hẻm 19 Cù Chính Lan", "Đào Duy Từ")
+        function parseCombinedAddressQuery(rawQuery) {
+            const q = rawQuery.trim();
+            if (!q) return { house: '', street: '' };
+
+            // Nếu bắt đầu bằng "Hẻm <số> <tên đường>"
+            const hemPattern = q.match(/^(hẻm\s*\d+[a-z]?)\s+(.+)$/i) || q.match(/^(hem\s*\d+[a-z]?)\s+(.+)$/i);
+            if (hemPattern) {
+                return { house: hemPattern[1], street: hemPattern[2] };
+            }
+
+            // Nếu bắt đầu bằng Số nhà: VD "150 Trần Phú" hoặc "39B Trần Cao Vân"
+            const houseFirstPattern = q.match(/^(\d+[a-zA-Z]?)\s+(.+)$/);
+            if (houseFirstPattern) {
+                return { house: houseFirstPattern[1], street: houseFirstPattern[2] };
+            }
+
+            // Nếu kết thúc bằng số nhà: VD "Trần Phú 150"
+            const houseLastPattern = q.match(/^(.+?)\s+(\d+[a-zA-Z]?)$/);
+            if (houseLastPattern && !normalizeVN(houseLastPattern[1]).endsWith('hem')) {
+                return { house: houseLastPattern[2], street: houseLastPattern[1] };
+            }
+
+            return { house: '', street: q };
+        }
+
+        // XỬ LÝ TRA CỨU TỪ Ô GỘP
+        function handleQuickLookup() {
+            const raw = document.getElementById('quickCombinedInput').value;
+            const parsed = parseCombinedAddressQuery(raw);
+            document.getElementById('houseNumberInput').value = parsed.house;
+            document.getElementById('streetNameInput').value = parsed.street;
+            executeAddressLookup(parsed.house, parsed.street);
+        }
+
+        // XỬ LÝ TRA CỨU TỪ 2 Ô TÁCH RIÊNG
+        function handleSplitLookup() {
+            const house = document.getElementById('houseNumberInput').value.trim();
+            const street = document.getElementById('streetNameInput').value.trim();
+            document.getElementById('quickCombinedInput').value = [house, street].filter(Boolean).join(' ');
+            executeAddressLookup(house, street);
+        }
+
+        function setSampleQuery(sampleText) {
+            document.getElementById('quickCombinedInput').value = sampleText;
+            handleQuickLookup();
+        }
+
+        function clearLookup() {
+            document.getElementById('quickCombinedInput').value = '';
+            document.getElementById('houseNumberInput').value = '';
+            document.getElementById('streetNameInput').value = '';
+            executeAddressLookup('', '');
+        }
+
+        // HÀM CHẠY TRA CỨU CHÍNH & CẬP NHẬT GIAO DIỆN + BẢN ĐỒ
+        function executeAddressLookup(houseStr, streetStr) {
+            const normStreetQuery = normalizeVN(streetStr);
+            const normHouseQuery = normalizeVN(houseStr);
+
+            let exactMatches = [];
+            let otherSegmentsOnSameStreet = [];
+
+            if (!normStreetQuery && !normHouseQuery) {
+                renderLookupResults(addressDB.slice(0, 25), [], false);
+                document.getElementById('lookupMatchCount').textContent = `Hiển thị 25/${addressDB.length} tuyến tiêu biểu`;
+                renderLookupMarkersOnMap([]);
+                return;
+            }
+
+            addressDB.forEach(record => {
+                const normRecStreet = normalizeVN(record.street);
+                const normRecGroup = normalizeVN(record.group);
+                const normRecOfficer = normalizeVN(record.officer);
+
+                // Kiểm tra tên đường khớp
+                const streetMatched = !normStreetQuery ||
+                    normRecStreet.includes(normStreetQuery) ||
+                    normStreetQuery.includes(normRecStreet) ||
+                    normRecGroup.includes(normStreetQuery) ||
+                    normRecOfficer.includes(normStreetQuery);
+
+                if (streetMatched) {
+                    const houseCheck = checkHouseNumberMatch(houseStr, record.range, record.street);
+                    if (houseCheck.matched) {
+                        exactMatches.push({ ...record, matchReason: houseCheck.reason, exactType: houseCheck.exactType });
+                    } else {
+                        otherSegmentsOnSameStreet.push(record);
+                    }
+                }
+            });
+
+            document.getElementById('lookupMatchCount').textContent =
+                `Tìm thấy ${exactMatches.length} kết quả khớp chính xác`;
+
+            renderLookupResults(exactMatches, otherSegmentsOnSameStreet, true);
+            renderLookupMarkersOnMap(exactMatches.length > 0 ? exactMatches : otherSegmentsOnSameStreet);
+        }
+
+        // HIỂN THỊ DANH SÁCH KẾT QUẢ CSKV
+        function renderLookupResults(exactList, fallbackList, isSearching) {
+            const container = document.getElementById('lookupResultsContainer');
+
+            if (isSearching && exactList.length === 0 && fallbackList.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                        <i class="fa-solid fa-magnifying-glass-location text-3xl text-slate-400 mb-2"></i>
+                        <p class="text-sm font-bold text-slate-700">Không tìm thấy tuyến đường hoặc số nhà phù hợp</p>
+                        <p class="text-xs text-slate-500 mt-1">Vui lòng kiểm tra lại chính tả tên đường hoặc liên hệ trực ban Công an phường: <strong>0260 3862 345</strong>.</p>
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+
+            // Render kết quả khớp chính xác
+            if (exactList.length > 0) {
+                html += exactList.map((item, idx) => {
+                    const offInfo = officersDB[item.officer] || { rank: 'Đại úy', phone: '0260 3862 345' };
+                    const isTopHighlight = isSearching && idx === 0;
+                    return `
+                        <div onclick="focusRecordOnMap(${item.id})" class="cursor-pointer rounded-xl p-3.5 transition-all border ${isTopHighlight ? 'bg-blue-50/80 border-blue-500 shadow-md ring-1 ring-blue-500' : 'bg-white hover:bg-slate-50 border-slate-200'}">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-900 text-amber-300">
+                                        <i class="fa-solid fa-location-dot"></i> ${item.group}
+                                    </span>
+                                    <h4 class="text-sm sm:text-base font-extrabold text-slate-900 mt-1">
+                                        Đường ${toTitleCaseStreet(item.street)}
+                                        <span class="text-blue-700 font-bold">(${item.range})</span>
+                                    </h4>
+                                </div>
+                                ${isSearching && item.matchReason ? `
+                                    <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full shrink-0">
+                                        <i class="fa-solid fa-check-circle mr-0.5"></i>Đúng địa bàn
+                                    </span>
+                                ` : ''}
+                            </div>
+
+                            ${isSearching && item.matchReason ? `
+                                <p class="text-[11px] text-emerald-700 font-medium mt-1">
+                                    <i class="fa-solid fa-bullseye mr-1"></i>${item.matchReason}
+                                </p>
+                            ` : ''}
+
+                            <!-- Thông tin CSKV -->
+                            <div class="mt-2.5 pt-2.5 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-9 h-9 rounded-full bg-amber-500 text-slate-950 font-extrabold flex items-center justify-center text-xs shadow-sm">
+                                        <i class="fa-solid fa-user-shield"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] text-slate-500 font-medium">CSKV Phụ trách (${offInfo.rank}):</p>
+                                        <p class="text-sm font-extrabold text-blue-950">Đ/c ${item.officer}</p>
+                                    </div>
+                                </div>
+
+                                <a href="tel:${offInfo.phone.replace(/\s+/g, '')}" onclick="event.stopPropagation()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition">
+                                    <i class="fa-solid fa-phone"></i> ${offInfo.phone}
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Nếu người dùng nhập số nhà nhưng nằm ở đoạn khác của cùng tên đường -> Gợi ý các đoạn khác trên đường đó
+            if (isSearching && fallbackList.length > 0) {
+                html += `
+                    <div class="pt-2">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            <i class="fa-solid fa-road mr-1"></i>Các đoạn số nhà khác trên cùng tuyến đường (${fallbackList.length}):
+                        </p>
+                        <div class="space-y-2">
+                            ${fallbackList.map(item => `
+                                <div onclick="focusRecordOnMap(${item.id})" class="cursor-pointer p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs flex items-center justify-between">
+                                    <div>
+                                        <span class="font-bold text-slate-800">${toTitleCaseStreet(item.street)}</span>
+                                        <span class="text-blue-700 font-semibold ml-1">[Số nhà: ${item.range}]</span>
+                                        <div class="text-[11px] text-slate-500">${item.group}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-bold text-slate-900 block">Đ/c ${item.officer}</span>
+                                        <span class="text-[10px] text-blue-600">Xem trên bản đồ →</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // =========================================================================
+        // 4. ĐỊNH VỊ GPS NGƯỜI DÂN ("LẤY VỊ TRÍ HIỆN TẠI")
+        // =========================================================================
+        function locateUserGPS() {
+            showToast("Đang xác định tọa độ GPS hiện tại tại Phường Kon Tum...");
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        // Kiểm tra nếu người dùng đang ở ngoài địa phận Kon Tum thì mô phỏng về trung tâm Phường Kon Tum để trải nghiệm tính năng
+                        if (lat < 14.30 || lat > 14.42 || lng < 107.95 || lng > 108.06) {
+                            simulateKonTumGPSLocation();
+                        } else {
+                            processGPSCoordinates(lat, lng, "Vị trí GPS thực tế của bạn");
+                        }
+                    },
+                    () => {
+                        simulateKonTumGPSLocation();
+                    },
+                    { timeout: 4000 }
+                );
+            } else {
+                simulateKonTumGPSLocation();
+            }
+        }
+
+        function simulateKonTumGPSLocation() {
+            // Chọn ngẫu nhiên 1 điểm thực tế tại trung tâm Phường Kon Tum
+            const sampleRecord = addressDB[Math.floor(Math.random() * 60)];
+            processGPSCoordinates(sampleRecord.lat, sampleRecord.lng, `Tọa độ GPS tại khu vực đường ${toTitleCaseStreet(sampleRecord.street)}`);
+        }
+
+        function processGPSCoordinates(lat, lng, label) {
+            // Tìm tuyến đường/Tổ gần tọa độ GPS nhất
+            let nearest = addressDB[0];
+            let minDist = Infinity;
+            addressDB.forEach(r => {
+                const d = Math.hypot(r.lat - lat, r.lng - lng);
+                if (d < minDist) {
+                    minDist = d;
+                    nearest = r;
+                }
+            });
+
+            document.getElementById('quickCombinedInput').value = toTitleCaseStreet(nearest.street);
+            handleQuickLookup();
+
+            if (map) {
+                map.setView([lat, lng], 16);
+                const offInfo = officersDB[nearest.officer] || { rank: 'Đại úy', phone: '0260 3862 345' };
+                L.popup()
+                    .setLatLng([lat, lng])
+                    .setContent(`
+                        <div class="p-1 text-xs">
+                            <div class="font-bold text-emerald-700 mb-1"><i class="fa-solid fa-location-crosshairs mr-1"></i>${label}</div>
+                            <div class="font-extrabold text-slate-900">${nearest.group}</div>
+                            <div class="text-slate-600">Gần tuyến: <b>${toTitleCaseStreet(nearest.street)} (${nearest.range})</b></div>
+                            <div class="mt-1.5 pt-1.5 border-t border-slate-200">
+                                CSKV Phụ trách: <b class="text-blue-800">Đ/c ${nearest.officer}</b><br>
+                                Điện thoại: <a href="tel:${offInfo.phone}" class="text-emerald-700 font-bold">${offInfo.phone}</a>
+                            </div>
+                        </div>
+                    `)
+                    .openOn(map);
+            }
+            showToast(`Đã xác định vị trí tại ${nearest.group} - CSKV: Đ/c ${nearest.officer}`);
+        }
+
+        // =========================================================================
+        // 5. KHỞI TẠO BẢN ĐỒ SỐ LEAFLET & LỚP DỮ LIỆU ĐỊA BÀN + ANTT
+        // =========================================================================
+        function initMap() {
+            map = L.map('map', {
+                center: [14.3555, 108.0075],
+                zoom: 14
+            });
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap | Công an Phường Kon Tum'
+            }).addTo(map);
+
+            zoneLayersGroup = L.layerGroup().addTo(map);
+            lookupMarkersGroup = L.layerGroup().addTo(map);
+            incidentMarkersGroup = L.layerGroup().addTo(map);
+
+            // Trụ sở Công an Phường Kon Tum (Marker trung tâm)
+            const hqIcon = L.divIcon({
+                className: 'custom-hq-icon',
+                html: `<div class="w-9 h-9 rounded-full bg-amber-500 border-2 border-white shadow-lg flex items-center justify-center text-slate-950 font-bold text-base" title="Công an Phường Kon Tum">
+                        <i class="fa-solid fa-building-shield"></i>
+                       </div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+
+            L.marker([14.3545, 108.0076], { icon: hqIcon })
+                .bindPopup(`
+                    <div class="text-xs p-1">
+                        <span class="text-[10px] font-bold uppercase text-amber-600">Trụ sở Chỉ huy</span>
+                        <h4 class="font-extrabold text-slate-900 text-sm">CÔNG AN PHƯỜNG KON TUM</h4>
+                        <p class="text-slate-600 mt-0.5">Tỉnh Quảng Ngãi • Trực ban 24/7: <b>0260 3862 345</b></p>
+                    </div>
+                `)
+                .addTo(map);
+
+            renderZonePolygons('ALL');
+            renderSecurityIncidentsOnMap();
+        }
+
+        function renderZonePolygons(selectedZone) {
+            if (!zoneLayersGroup) return;
+            zoneLayersGroup.clearLayers();
+
+            Object.entries(ZONE_POLYGONS).forEach(([zoneKey, zData]) => {
+                if (selectedZone !== 'ALL' && selectedZone !== zoneKey) return;
+
+                // Tính số tuyến đường và số CSKV trong Khu vực này
+                const recordsInZone = addressDB.filter(r => r.zone === zoneKey);
+                const officersInZone = new Set(recordsInZone.map(r => r.officer));
+
+                const poly = L.polygon(zData.coords, {
+                    color: zData.color,
+                    weight: 2,
+                    fillColor: zData.color,
+                    fillOpacity: 0.12,
+                    dashArray: '5, 5'
+                });
+
+                poly.bindPopup(`
+                    <div class="text-xs p-1">
+                        <div class="font-extrabold text-sm" style="color:${zData.color}">${zData.name}</div>
+                        <div class="mt-1 text-slate-600">Số tuyến đường/đoạn: <b>${recordsInZone.length}</b></div>
+                        <div class="text-slate-600">Số CSKV phụ trách: <b>${officersInZone.size} đồng chí</b></div>
+                    </div>
+                `);
+
+                zoneLayersGroup.addLayer(poly);
+            });
+        }
+
+        function filterMapByZone(zoneKey) {
+            renderZonePolygons(zoneKey);
+            if (zoneKey !== 'ALL' && ZONE_POLYGONS[zoneKey]) {
+                map.setView(ZONE_POLYGONS[zoneKey].center, 15);
+            } else {
+                resetMapView();
+            }
+        }
+
+        function resetMapView() {
+            if (map) map.setView([14.3555, 108.0075], 14);
+        }
+
+        // Vẽ các điểm kết quả tra cứu địa chỉ lên bản đồ
+        function renderLookupMarkersOnMap(records) {
+            if (!lookupMarkersGroup) return;
+            lookupMarkersGroup.clearLayers();
+
+            records.slice(0, 15).forEach((item, index) => {
+                const offInfo = officersDB[item.officer] || { rank: 'Đại úy', phone: '0260 3862 345' };
+                const markerIcon = L.divIcon({
+                    className: 'lookup-pin',
+                    html: `<div class="w-7 h-7 rounded-full ${index === 0 ? 'bg-blue-700 ring-4 ring-blue-300' : 'bg-blue-600'} text-white border-2 border-white shadow-md flex items-center justify-center text-xs font-bold">
+                            <i class="fa-solid fa-house-user"></i>
+                           </div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+
+                const m = L.marker([item.lat, item.lng], { icon: markerIcon })
+                    .bindPopup(`
+                        <div class="text-xs p-1 min-w-[200px]">
+                            <span class="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">${item.group}</span>
+                            <div class="font-extrabold text-slate-900 text-sm mt-1">Đường ${toTitleCaseStreet(item.street)}</div>
+                            <div class="text-blue-700 font-semibold">Số nhà: ${item.range}</div>
+                            <div class="mt-2 pt-2 border-t border-slate-200">
+                                <div class="text-slate-500 text-[11px]">Cảnh sát khu vực (${offInfo.rank}):</div>
+                                <div class="font-extrabold text-slate-900">Đ/c ${item.officer}</div>
+                                <a href="tel:${offInfo.phone}" class="inline-block mt-1 text-emerald-700 font-bold"><i class="fa-solid fa-phone mr-1"></i>${offInfo.phone}</a>
+                            </div>
+                        </div>
+                    `);
+                lookupMarkersGroup.addLayer(m);
+            });
+
+            if (records.length > 0 && map) {
+                map.setView([records[0].lat, records[0].lng], 15);
+            }
+        }
+
+        function focusRecordOnMap(recordId) {
+            const item = addressDB.find(r => r.id === recordId);
+            if (!item || !map) return;
+            renderLookupMarkersOnMap([item]);
+            map.setView([item.lat, item.lng], 16);
+        }
+
+        // =========================================================================
+        // 6. QUẢN LÝ PHÂN QUYỀN (GUEST / CSKV / ADMIN) & BẢO MẬT LỚP ANTT
+        // =========================================================================
+        function getVisibleIncidentsForRole() {
+            if (currentRole === 'GUEST') return []; // Bảo mật tuyệt đối với tài khoản khách
+            if (currentRole === 'ADMIN') return incidentsDB;
+            // Nếu là CSKV: Chỉ xem các vụ việc thuộc địa bàn mình phụ trách
+            return incidentsDB.filter(inc => normalizeVN(inc.officer) === normalizeVN(currentCskvUser));
+        }
+
+        function switchRole(newRole) {
+            currentRole = newRole;
+
+            // Cập nhật style 3 nút Role
+            ['GUEST', 'CSKV', 'ADMIN'].forEach(r => {
+                const btn = document.getElementById(`roleBtn-${r}`);
+                if (r === newRole) {
+                    btn.className = "px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-amber-500 text-slate-950 shadow";
+                } else {
+                    btn.className = "px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 text-slate-300 hover:text-white";
+                }
+            });
+
+            // Ẩn/hiện các thành phần theo Role
+            const cskvSelector = document.getElementById('cskvAccountSelectorWrap');
+            const tabIncidents = document.getElementById('tabBtn-INCIDENTS');
+            const tabAdminData = document.getElementById('tabBtn-ADMIN_DATA');
+            const tabAdminOfficers = document.getElementById('tabBtn-ADMIN_OFFICERS');
+            const securityFilterBar = document.getElementById('securityMapFilterBar');
+            const legendBadge = document.getElementById('legendSecurityBadge');
+            const kpiGuest = document.getElementById('kpiCard4Guest');
+            const kpiSecure = document.getElementById('kpiCard4Secure');
+            const securityStatusText = document.getElementById('securityStatusText');
+
+            if (newRole === 'GUEST') {
+                cskvSelector.classList.add('hidden');
+                cskvSelector.classList.remove('flex');
+                tabIncidents.classList.add('hidden');
+                tabIncidents.classList.remove('flex');
+                tabAdminData.classList.add('hidden');
+                tabAdminData.classList.remove('flex');
+                tabAdminOfficers.classList.add('hidden');
+                tabAdminOfficers.classList.remove('flex');
+                securityFilterBar.classList.add('hidden');
+                securityFilterBar.classList.remove('flex');
+                legendBadge.classList.add('hidden');
+                kpiGuest.classList.remove('hidden');
+                kpiSecure.classList.add('hidden');
+                kpiSecure.classList.remove('flex');
+                securityStatusText.textContent = "Chế độ Khách (Đã ẩn toàn bộ dữ liệu ANTT mật)";
+                document.getElementById('mapSubtitleRoleInfo').textContent = "Chế độ Người dân: Tra cứu địa giới hành chính và thông tin liên hệ Cảnh sát khu vực";
+                switchTab('MAP_LOOKUP');
+            } else if (newRole === 'CSKV') {
+                cskvSelector.classList.remove('hidden');
+                cskvSelector.classList.add('flex');
+                tabIncidents.classList.remove('hidden');
+                tabIncidents.classList.add('flex');
+                tabAdminData.classList.add('hidden');
+                tabAdminData.classList.remove('flex');
+                tabAdminOfficers.classList.add('hidden');
+                tabAdminOfficers.classList.remove('flex');
+                securityFilterBar.classList.remove('hidden');
+                securityFilterBar.classList.add('flex');
+                legendBadge.classList.remove('hidden');
+                kpiGuest.classList.add('hidden');
+                kpiSecure.classList.remove('hidden');
+                kpiSecure.classList.add('flex');
+                securityStatusText.textContent = `Cán bộ CSKV: Đ/c ${currentCskvUser} (Xem ANTT địa bàn phụ trách)`;
+                document.getElementById('mapSubtitleRoleInfo').innerHTML = `Bản đồ nghiệp vụ ANTT • Địa bàn phụ trách của <b>Đ/c ${currentCskvUser}</b>`;
+                if (currentTab === 'ADMIN_DATA' || currentTab === 'ADMIN_OFFICERS') switchTab('MAP_LOOKUP');
+            } else if (newRole === 'ADMIN') {
+                cskvSelector.classList.add('hidden');
+                cskvSelector.classList.remove('flex');
+                tabIncidents.classList.remove('hidden');
+                tabIncidents.classList.add('flex');
+                tabAdminData.classList.remove('hidden');
+                tabAdminData.classList.add('flex');
+                tabAdminOfficers.classList.remove('hidden');
+                tabAdminOfficers.classList.add('flex');
+                securityFilterBar.classList.remove('hidden');
+                securityFilterBar.classList.add('flex');
+                legendBadge.classList.remove('hidden');
+                kpiGuest.classList.add('hidden');
+                kpiSecure.classList.remove('hidden');
+                kpiSecure.classList.add('flex');
+                securityStatusText.textContent = "Quản trị viên (Toàn quyền điều hành ANTT & CRUD dữ liệu toàn phường)";
+                document.getElementById('mapSubtitleRoleInfo').innerHTML = `Bản đồ Chỉ huy ANTT Toàn Phường Kon Tum • Hiển thị toàn bộ 32 địa bàn CSKV`;
+            }
+
+            updateKPIStats();
+            renderSecurityIncidentsOnMap();
+            renderIncidentsTable();
+            renderAdminAddressTable();
+            renderOfficersDirectory();
+            showToast(`Đã chuyển sang chế độ: ${newRole === 'GUEST' ? 'Khách (Người dân)' : newRole === 'CSKV' ? 'Cảnh sát khu vực (' + currentCskvUser + ')' : 'Quản trị viên (Admin)'}`);
+        }
+
+        function handleCskvAccountChange() {
+            currentCskvUser = document.getElementById('activeCskvSelect').value;
+            switchRole('CSKV');
+        }
+
+        function switchTab(tabId) {
+            currentTab = tabId;
+            const tabs = ['MAP_LOOKUP', 'INCIDENTS', 'ADMIN_DATA', 'ADMIN_OFFICERS'];
+            tabs.forEach(t => {
+                const viewEl = document.getElementById(`view-${t}`);
+                const btnEl = document.getElementById(`tabBtn-${t}`);
+                if (t === tabId) {
+                    viewEl.classList.remove('hidden');
+                    btnEl.classList.add('bg-white/15', 'text-amber-300', 'font-semibold');
+                    btnEl.classList.remove('text-slate-300');
+                } else {
+                    viewEl.classList.add('hidden');
+                    btnEl.classList.remove('bg-white/15', 'text-amber-300', 'font-semibold');
+                    btnEl.classList.add('text-slate-300');
+                }
+            });
+
+            if (tabId === 'MAP_LOOKUP' && map) {
+                setTimeout(() => map.invalidateSize(), 150);
+            } else if (tabId === 'INCIDENTS') {
+                renderIncidentsTable();
+            } else if (tabId === 'ADMIN_DATA') {
+                renderAdminAddressTable();
+            } else if (tabId === 'ADMIN_OFFICERS') {
+                renderOfficersDirectory();
+            }
+        }
+
+        // =========================================================================
+        // 7. HIỂN THỊ & QUẢN LÝ DỮ LIỆU VỤ VIỆC AN NINH TRẬT TỰ TRÊN BẢN ĐỒ
+        // =========================================================================
+        const CATEGORY_META = {
+            "MATUY": { label: "Tội phạm Ma túy", color: "#ef4444", badgeClass: "bg-red-100 text-red-800 border-red-200", icon: "fa-capsules" },
+            "TTXH": { label: "Trật tự xã hội", color: "#f59e0b", badgeClass: "bg-amber-100 text-amber-800 border-amber-200", icon: "fa-bolt" },
+            "HINHSU": { label: "Đối tượng Quản lý / Hình sự", color: "#9333ea", badgeClass: "bg-purple-100 text-purple-800 border-purple-200", icon: "fa-user-lock" },
+            "PCCC": { label: "An toàn PCCC & GT", color: "#06b6d4", badgeClass: "bg-cyan-100 text-cyan-800 border-cyan-200", icon: "fa-fire-extinguisher" }
+        };
+
+        function setIncidentCategoryFilter(cat) {
+            currentIncidentCatFilter = cat;
+            ['ALL', 'TTXH', 'MATUY', 'HINHSU', 'PCCC'].forEach(c => {
+                const btn = document.getElementById(`catBtn-${c}`);
+                if (c === cat) {
+                    btn.className = "px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition shadow";
+                } else {
+                    btn.className = "px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 transition";
+                }
+            });
+            renderSecurityIncidentsOnMap();
+        }
+
+        function renderSecurityIncidentsOnMap() {
+            if (!incidentMarkersGroup) return;
+            incidentMarkersGroup.clearLayers();
+
+            // Bảo mật: Nếu là GUEST thì tuyệt đối không vẽ bất kỳ điểm vụ việc ANTT nào
+            if (currentRole === 'GUEST') return;
+
+            const visibleList = getVisibleIncidentsForRole().filter(inc =>
+                currentIncidentCatFilter === 'ALL' || inc.category === currentIncidentCatFilter
+            );
+
+            visibleList.forEach(inc => {
+                const meta = CATEGORY_META[inc.category] || CATEGORY_META["TTXH"];
+                const iconHtml = `
+                    <div class="w-8 h-8 rounded-full pulse-marker border-2 border-white shadow-lg flex items-center justify-center text-white text-xs" style="background-color:${meta.color}">
+                        <i class="fa-solid ${meta.icon}"></i>
+                    </div>
+                `;
+                const customIcon = L.divIcon({
+                    className: 'security-incident-pin',
+                    html: iconHtml,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+
+                const marker = L.marker([inc.lat, inc.lng], { icon: customIcon })
+                    .bindPopup(`
+                        <div class="text-xs p-1 min-w-[220px]">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <span class="px-2 py-0.5 rounded font-bold text-[10px] text-white" style="background:${meta.color}">${meta.label}</span>
+                                <span class="text-[10px] text-slate-400 font-semibold">${inc.date}</span>
+                            </div>
+                            <div class="font-extrabold text-slate-900 text-sm">${inc.address}</div>
+                            <div class="text-[11px] text-blue-700 font-semibold">${inc.group}</div>
+                            <div class="mt-1.5 pt-1.5 border-t border-slate-200 space-y-1">
+                                <div><span class="text-slate-500">Đối tượng:</span> <b class="text-red-700">${inc.subject}</b></div>
+                                <div><span class="text-slate-500">Nội dung:</span> ${inc.description}</div>
+                                <div><span class="text-slate-500">CSKV Phụ trách:</span> <b>Đ/c ${inc.officer}</b></div>
+                            </div>
+                        </div>
+                    `);
+                incidentMarkersGroup.addLayer(marker);
+            });
+        }
+
+        function renderIncidentsTable() {
+            const tbody = document.getElementById('incidentsTableBody');
+            if (!tbody) return;
+
+            const catFilter = document.getElementById('incidentTableFilterCat').value;
+            const list = getVisibleIncidentsForRole().filter(inc => catFilter === 'ALL' || inc.category === catFilter);
+
+            document.getElementById('incidentRoleNotice').innerHTML = currentRole === 'ADMIN'
+                ? `Đang xem với quyền <b>Admin (Chỉ huy)</b>: Hiển thị toàn bộ <b>${list.length}</b> vụ việc/đối tượng trên toàn phường.`
+                : `Đang xem với quyền <b>CSKV (Đ/c ${currentCskvUser})</b>: Hiển thị <b>${list.length}</b> vụ việc thuộc địa bàn đồng chí phụ trách.`;
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">Chưa có vụ việc/đối tượng nào trong danh mục này.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(inc => {
+                const meta = CATEGORY_META[inc.category] || CATEGORY_META["TTXH"];
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="py-3 px-3 font-bold text-slate-700">
+                            <div>${inc.id}</div>
+                            <div class="text-[11px] text-slate-400 font-normal">${inc.date}</div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold border ${meta.badgeClass}">
+                                <i class="fa-solid ${meta.icon} mr-1"></i>${meta.label}
+                            </span>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div class="font-bold text-slate-900">${inc.address}</div>
+                            <div class="text-[11px] text-blue-700 font-medium">${inc.group}</div>
+                        </td>
+                        <td class="py-3 px-3 font-bold text-red-700">${inc.subject}</td>
+                        <td class="py-3 px-3 max-w-xs text-slate-600">${inc.description}</td>
+                        <td class="py-3 px-3 font-semibold text-slate-800">Đ/c ${inc.officer}</td>
+                        <td class="py-3 px-3 text-right space-x-1 whitespace-nowrap">
+                            <button onclick="viewIncidentOnMap('${inc.id}')" title="Xem trên bản đồ" class="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg">
+                                <i class="fa-solid fa-location-dot"></i>
+                            </button>
+                            <button onclick="openIncidentModal('${inc.id}')" title="Sửa" class="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="deleteIncident('${inc.id}')" title="Xóa" class="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function viewIncidentOnMap(incId) {
+            const inc = incidentsDB.find(i => i.id === incId);
+            if (!inc) return;
+            switchTab('MAP_LOOKUP');
+            setTimeout(() => {
+                map.setView([inc.lat, inc.lng], 16);
+            }, 200);
+        }
+
+        // Tự động khớp Tổ & CSKV khi nhập địa chỉ nhà trong form Vụ việc
+        function autoDetectOfficerForIncident() {
+            const addrVal = document.getElementById('incAddress').value;
+            const parsed = parseCombinedAddressQuery(addrVal);
+            if (!parsed.street) return;
+
+            const normSt = normalizeVN(parsed.street);
+            for (const rec of addressDB) {
+                if (normalizeVN(rec.street).includes(normSt)) {
+                    const check = checkHouseNumberMatch(parsed.house, rec.range, rec.street);
+                    if (check.matched) {
+                        document.getElementById('incGroup').value = rec.group;
+                        document.getElementById('incOfficer').value = rec.officer;
+                        return;
+                    }
+                }
+            }
+        }
+
+        function openIncidentModal(editId = null) {
+            const modal = document.getElementById('incidentModal');
+            document.getElementById('incidentForm').reset();
+
+            if (editId) {
+                const inc = incidentsDB.find(i => i.id === editId);
+                if (inc) {
+                    document.getElementById('incId').value = inc.id;
+                    document.getElementById('incAddress').value = inc.address;
+                    document.getElementById('incCategory').value = inc.category;
+                    document.getElementById('incGroup').value = inc.group;
+                    document.getElementById('incOfficer').value = inc.officer;
+                    document.getElementById('incSubject').value = inc.subject;
+                    document.getElementById('incSeverity').value = inc.severity;
+                    document.getElementById('incDescription').value = inc.description;
+                }
+            } else {
+                document.getElementById('incId').value = '';
+                if (currentRole === 'CSKV') {
+                    document.getElementById('incOfficer').value = currentCskvUser;
+                }
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeIncidentModal() {
+            const modal = document.getElementById('incidentModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveIncident(e) {
+            e.preventDefault();
+            const idVal = document.getElementById('incId').value;
+            const address = document.getElementById('incAddress').value.trim();
+            const category = document.getElementById('incCategory').value;
+            const group = document.getElementById('incGroup').value.trim();
+            const officer = document.getElementById('incOfficer').value;
+            const subject = document.getElementById('incSubject').value.trim();
+            const severity = document.getElementById('incSeverity').value;
+            const description = document.getElementById('incDescription').value.trim();
+
+            const [lat, lng] = getCoordinatesForRecord(Date.now() % 1000, group);
+
+            if (idVal) {
+                const idx = incidentsDB.findIndex(i => i.id === idVal);
+                if (idx !== -1) {
+                    incidentsDB[idx] = { ...incidentsDB[idx], address, category, group, officer, subject, severity, description };
+                }
+            } else {
+                const newId = "ANTT-" + String(incidentsDB.length + 1).padStart(2, '0');
+                const today = new Date().toLocaleDateString('vi-VN');
+                incidentsDB.unshift({
+                    id: newId, date: today, address, category, group, officer, subject, severity, description, lat, lng
+                });
+            }
+
+            saveAllToStorage();
+            renderSecurityIncidentsOnMap();
+            renderIncidentsTable();
+            closeIncidentModal();
+            showToast("Đã lưu thông tin vụ việc & đối tượng ANTT!");
+        }
+
+        function deleteIncident(incId) {
+            incidentsDB = incidentsDB.filter(i => i.id !== incId);
+            saveAllToStorage();
+            renderSecurityIncidentsOnMap();
+            renderIncidentsTable();
+            showToast("Đã xóa bản ghi vụ việc ANTT.");
+        }
+
+        // =========================================================================
+        // 8. CHỨC NĂNG QUẢN TRỊ DỮ LIỆU ĐỊA BÀN 316 DÒNG & CSKV (CHO ADMIN)
+        // =========================================================================
+        function renderAdminAddressTable() {
+            const tbody = document.getElementById('adminAddressTableBody');
+            if (!tbody) return;
+
+            const q = normalizeVN(document.getElementById('adminSearchInput').value);
+            const zoneF = document.getElementById('adminZoneFilter').value;
+            const officerF = document.getElementById('adminOfficerFilter').value;
+
+            const filtered = addressDB.filter(r => {
+                const matchZone = zoneF === 'ALL' || r.zone === zoneF;
+                const matchOfficer = officerF === 'ALL' || r.officer === officerF;
+                const matchQuery = !q ||
+                    normalizeVN(r.street).includes(q) ||
+                    normalizeVN(r.range).includes(q) ||
+                    normalizeVN(r.group).includes(q) ||
+                    normalizeVN(r.officer).includes(q);
+                return matchZone && matchOfficer && matchQuery;
+            });
+
+            document.getElementById('adminFilteredCount').textContent = `${filtered.length} / ${addressDB.length} dòng`;
+
+            tbody.innerHTML = filtered.map((r, idx) => `
+                <tr class="hover:bg-blue-50/40 transition">
+                    <td class="py-2.5 px-3 font-semibold text-slate-400">${idx + 1}</td>
+                    <td class="py-2.5 px-3">
+                        <span class="font-bold text-slate-800">${r.group}</span>
+                    </td>
+                    <td class="py-2.5 px-3">
+                        <span class="inline-flex items-center gap-1.5 font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                            <i class="fa-solid fa-user-shield text-blue-600 text-xs"></i>${r.officer}
+                        </span>
+                    </td>
+                    <td class="py-2.5 px-3 font-bold text-slate-900">${toTitleCaseStreet(r.street)}</td>
+                    <td class="py-2.5 px-3 font-semibold text-emerald-700">${r.range}</td>
+                    <td class="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
+                        <button onclick="openAddressModal(${r.id})" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg font-bold text-xs">
+                            <i class="fa-solid fa-pen"></i> Sửa
+                        </button>
+                        <button onclick="deleteAddressRecord(${r.id})" class="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-bold text-xs">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAddressModal(editId = null) {
+            const modal = document.getElementById('addressModal');
+            document.getElementById('addressForm').reset();
+
+            if (editId) {
+                const rec = addressDB.find(r => r.id === editId);
+                if (rec) {
+                    document.getElementById('addressModalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-400"></i> Chỉnh Sửa Tuyến Đường #${rec.id}`;
+                    document.getElementById('addrId').value = rec.id;
+                    document.getElementById('addrGroup').value = rec.group;
+                    document.getElementById('addrOfficer').value = rec.officer;
+                    document.getElementById('addrStreet').value = rec.street;
+                    document.getElementById('addrRange').value = rec.range;
+                }
+            } else {
+                document.getElementById('addressModalTitle').innerHTML = `<i class="fa-solid fa-plus-circle text-amber-400"></i> Thêm Tuyến Đường & Số Nhà Mới`;
+                document.getElementById('addrId').value = '';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeAddressModal() {
+            const modal = document.getElementById('addressModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveAddressRecord(e) {
+            e.preventDefault();
+            const idVal = document.getElementById('addrId').value;
+            const group = document.getElementById('addrGroup').value.trim().toUpperCase();
+            const officer = normalizeOfficerName(document.getElementById('addrOfficer').value);
+            const street = document.getElementById('addrStreet').value.trim();
+            const range = document.getElementById('addrRange').value.trim();
+            const zone = extractZoneFromGroup(group);
+
+            if (idVal) {
+                const idx = addressDB.findIndex(r => r.id === parseInt(idVal, 10));
+                if (idx !== -1) {
+                    addressDB[idx] = { ...addressDB[idx], group, officer, street, range, zone };
+                }
+            } else {
+                const nextId = addressDB.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+                const [lat, lng] = getCoordinatesForRecord(nextId, group);
+                addressDB.unshift({ id: nextId, group, officer, street, range, zone, lat, lng });
+            }
+
+            saveAllToStorage();
+            renderAdminAddressTable();
+            handleQuickLookup();
+            closeAddressModal();
+            showToast("Đã cập nhật dữ liệu Tuyến đường & Số nhà!");
+        }
+
+        function deleteAddressRecord(id) {
+            addressDB = addressDB.filter(r => r.id !== id);
+            saveAllToStorage();
+            renderAdminAddressTable();
+            handleQuickLookup();
+            showToast("Đã xóa dòng dữ liệu địa bàn.");
+        }
+
+        function resetDefaultDatabase() {
+            localStorage.removeItem('KONTUM_ADDR_DB_V4');
+            localStorage.removeItem('KONTUM_OFFICERS_DB_V4');
+            localStorage.removeItem('KONTUM_INCIDENTS_DB_V4');
+            initDatabase();
+            renderAdminAddressTable();
+            handleQuickLookup();
+            showToast("Đã khôi phục toàn bộ 316 dòng dữ liệu gốc từ file Excel!");
+        }
+
+        function exportDatabaseCSV() {
+            let csvContent = "\uFEFFSTT,Khu vực / Tổ,Cán bộ CSKV,Tên đường,Số nhà\n";
+            addressDB.forEach((r, idx) => {
+                csvContent += `${idx + 1},"${r.group}","${r.officer}","${r.street}","${r.range}"\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "Du_lieu_CSKV_Phuong_Kon_Tum_Cap_nhat.csv";
+            a.click();
+            showToast("Đã xuất file Excel/CSV dữ liệu địa bàn!");
+        }
+
+        // QUẢN TRỊ DANH BẠ 32 CÁN BỘ CSKV
+        function renderOfficersDirectory() {
+            const container = document.getElementById('officersGridContainer');
+            if (!container) return;
+
+            const officerNames = Object.keys(officersDB).filter(o => o !== "Chưa phân công").sort((a,b) => a.localeCompare(b, 'vi'));
+
+            container.innerHTML = officerNames.map(name => {
+                const info = officersDB[name];
+                const assignedRoutes = addressDB.filter(r => r.officer === name);
+                const assignedGroups = Array.from(new Set(assignedRoutes.map(r => r.group)));
+
+                return `
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 flex flex-col justify-between hover:shadow-md transition">
+                        <div>
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-10 h-10 rounded-full cand-gradient text-amber-400 font-bold flex items-center justify-center text-sm shadow">
+                                        <i class="fa-solid fa-user-shield"></i>
+                                    </div>
+                                    <div>
+                                        <span class="text-[11px] font-bold text-blue-700 uppercase">${info.rank} • CSKV</span>
+                                        <h4 class="text-sm font-extrabold text-slate-900">Đ/c ${name}</h4>
+                                    </div>
+                                </div>
+                                <button onclick="openOfficerModal('${name}')" class="text-slate-400 hover:text-blue-600 p-1" title="Sửa thông tin cán bộ">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            </div>
+
+                            <div class="mt-3 text-xs space-y-1 text-slate-600">
+                                <div><i class="fa-solid fa-phone text-emerald-600 mr-1.5"></i>SĐT: <strong class="text-slate-800">${info.phone}</strong></div>
+                                <div><i class="fa-solid fa-road text-blue-600 mr-1.5"></i>Phụ trách: <strong>${assignedRoutes.length} tuyến đường/đoạn</strong></div>
+                                <div class="text-[11px] text-slate-500 pt-1">
+                                    Địa bàn: <span class="font-semibold text-slate-700">${assignedGroups.join(', ') || 'Chưa phân công'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 pt-2.5 border-t border-slate-200 flex items-center justify-between">
+                            <button onclick="filterAdminByOfficer('${name}')" class="text-xs font-bold text-blue-700 hover:underline">
+                                Xem các tuyến đường →
+                            </button>
+                            <button onclick="impersonateCSKV('${name}')" class="text-[11px] bg-amber-100 hover:bg-amber-200 text-amber-900 px-2.5 py-1 rounded-lg font-bold">
+                                Xem góc nhìn CSKV
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterAdminByOfficer(name) {
+            document.getElementById('adminOfficerFilter').value = name;
+            switchTab('ADMIN_DATA');
+            renderAdminAddressTable();
+        }
+
+        function impersonateCSKV(name) {
+            currentCskvUser = name;
+            document.getElementById('activeCskvSelect').value = name;
+            switchRole('CSKV');
+            switchTab('MAP_LOOKUP');
+        }
+
+        function openOfficerModal(editName = null) {
+            const modal = document.getElementById('officerModal');
+            document.getElementById('officerForm').reset();
+
+            if (editName && officersDB[editName]) {
+                document.getElementById('offOriginalName').value = editName;
+                document.getElementById('offName').value = editName;
+                document.getElementById('offRank').value = officersDB[editName].rank;
+                document.getElementById('offPhone').value = officersDB[editName].phone;
+            } else {
+                document.getElementById('offOriginalName').value = '';
+            }
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeOfficerModal() {
+            const modal = document.getElementById('officerModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveOfficerRecord(e) {
+            e.preventDefault();
+            const origName = document.getElementById('offOriginalName').value;
+            const newName = normalizeOfficerName(document.getElementById('offName').value);
+            const rank = document.getElementById('offRank').value;
+            const phone = document.getElementById('offPhone').value.trim();
+
+            if (origName && origName !== newName) {
+                delete officersDB[origName];
+                addressDB.forEach(r => {
+                    if (r.officer === origName) r.officer = newName;
+                });
+            }
+
+            officersDB[newName] = { name: newName, rank, phone };
+            saveAllToStorage();
+            renderOfficersDirectory();
+            closeOfficerModal();
+            showToast(`Đã lưu thông tin Đ/c ${newName}!`);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastMessage').textContent = msg;
+            toast.classList.remove('hidden');
+            toast.classList.add('flex');
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('flex');
+            }, 3500);
+        }
+
+        // KHỞI CHẠY ỨNG DỤNG KHI TẢI TRANG
+        window.onload = function () {
+            initDatabase();
+            initMap();
+            executeAddressLookup('', '');
+        };
+    </script>
+</body>
+</html>
