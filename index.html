@@ -179,7 +179,7 @@
                 <div id="kpiCard4Guest" class="bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl p-3.5 shadow-sm flex items-center justify-between">
                     <div>
                         <p class="text-xs text-red-100 font-medium">Trực ban Công an Phường Kon Tum</p>
-                        <p class="text-base sm:text-lg font-extrabold tracking-wide mt-0.5"><i class="fa-solid fa-phone-volume mr-1.5"></i>0260 3862 345</p>
+                        <p class="text-base sm:text-lg font-extrabold tracking-wide mt-0.5"><i class="fa-solid fa-phone-volume mr-1.5"></i>02603 864 389</p>
                     </div>
                     <button onclick="locateUserGPS()" class="bg-white text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded-lg text-xs font-bold shadow transition shrink-0">
                         <i class="fa-solid fa-location-crosshairs mr-1"></i>Định vị GPS
@@ -941,7 +941,7 @@
 208|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Phú|586-638
 209|TỔ 6 (QUYẾT THẮNG CŨ)|Trần Thái Phương Thảo|Trần Quang Khải|15-37, 18-44
 210|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|LÊ HỒNG PHONG|90 - 122
-211|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|BÀ TRIỆU|347 - 373
+211|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|BÀ̀TRIỆU|347 - 373
 212|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|PHAN ĐÌNH PHÙNG|921 - 1049
 213|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|LÊ LỢI|120 - 186
 214|TỔ 7 (QUYẾT THẮNG CŨ)|Đỗ Hoàng Hải|PHAN CHU TRINH|301 - 351
@@ -1258,7 +1258,7 @@
                         officersDB[item.officer] = {
                             name: item.officer,
                             rank: item.officer === "Chưa phân công" ? "Chưa rõ" : ranks[idx % ranks.length],
-                            phone: item.officer === "Chưa phân công" ? "0260 3862 345" : `0905 ${phoneSuffix}`
+                            phone: item.officer === "Chưa phân công" ? "02603 864 389" : `0905 ${phoneSuffix}`
                         };
                         idx++;
                     }
@@ -1573,7 +1573,7 @@
                     <div class="text-center py-8 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
                         <i class="fa-solid fa-magnifying-glass-location text-3xl text-slate-400 mb-2"></i>
                         <p class="text-sm font-bold text-slate-700">Không tìm thấy tuyến đường hoặc số nhà phù hợp</p>
-                        <p class="text-xs text-slate-500 mt-1">Vui lòng kiểm tra lại chính tả tên đường hoặc liên hệ trực ban Công an phường: <strong>0260 3862 345</strong>.</p>
+                        <p class="text-xs text-slate-500 mt-1">Vui lòng kiểm tra lại chính tả tên đường hoặc liên hệ trực ban Công an phường: <strong>02603 864 389</strong>.</p>
                     </div>`;
                 return;
             }
@@ -1583,7 +1583,7 @@
             // Render kết quả khớp chính xác
             if (exactList.length > 0) {
                 html += exactList.map((item, idx) => {
-                    const offInfo = officersDB[item.officer] || { rank: 'Đại úy', phone: '0260 3862 345' };
+                    const offInfo = officersDB[item.officer] || { rank: 'Đại úy', phone: '02603 864 389' };
                     const isTopHighlight = isSearching && idx === 0;
                     return `
                         <div onclick="focusRecordOnMap(${item.id})" class="cursor-pointer rounded-xl p-3.5 transition-all border ${isTopHighlight ? 'bg-blue-50/80 border-blue-500 shadow-md ring-1 ring-blue-500' : 'bg-white hover:bg-slate-50 border-slate-200'}">
@@ -1711,7 +1711,7 @@
 
             if (map) {
                 map.setView([lat, lng], 16);
-                const offInfo = officersDB[nearest.officer] || { rank: 'Đại úy', phone: '0260 3862 345' };
+                const offInfo = officersDB[nearest.officer] || { rank: 'Đại úy', phone: '02603 864 389' };
                 L.popup()
                     .setLatLng([lat, lng])
                     .setContent(`
@@ -1763,7 +1763,7 @@
                     <div class="text-xs p-1">
                         <span class="text-[10px] font-bold uppercase text-amber-600">Trụ sở Chỉ huy</span>
                         <h4 class="font-extrabold text-slate-900 text-sm">CÔNG AN PHƯỜNG KON TUM</h4>
-                        <p class="text-slate-600 mt-0.5">Tỉnh Quảng Ngãi • Trực ban 24/7: <b>0260 3862 345</b></p>
+                        <p class="text-slate-600 mt-0.5">Tỉnh Quảng Ngãi • Trực ban 24/7: <b>02603 864 389</b></p>
                     </div>
                 `)
                 .addTo(map);
@@ -1822,7 +1822,7 @@
             lookupMarkersGroup.clearLayers();
 
             records.slice(0, 15).forEach((item, index) => {
-                const offInfo = officersDB[item.officer] || { rank: 'Đại úy', phone: '0260 3862 345' };
+                const offInfo = officersDB[item.officer] || { rank: 'Đại úy', phone: '02603 864 389' };
                 const markerIcon = L.divIcon({
                     className: 'lookup-pin',
                     html: `<div class="w-7 h-7 rounded-full ${index === 0 ? 'bg-blue-700 ring-4 ring-blue-300' : 'bg-blue-600'} text-white border-2 border-white shadow-md flex items-center justify-center text-xs font-bold">
